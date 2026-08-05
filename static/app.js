@@ -861,16 +861,35 @@
   function lightEffectSvg(o) {
     const p = getProduct(o.productId);
     if (!state.lightingSimulation || !state.layers.effects || !o.lightOn || p.effect === 'none') return '';
+
+    // PyMuPDF's SVG-to-PDF converter does not reliably support radialGradient
+    // combined with mix-blend-mode. Some exported light pools therefore became
+    // solid black shapes. Build the glow from translucent vector ellipses instead.
+    // This keeps the plan and lighting effect vector-based and renders consistently
+    // in browsers, PDF viewers, Illustrator and print workflows.
     const strength = clamp((o.intensity ?? p.intensity ?? .8) * state.masterLight, 0, 1.8);
+    if (strength <= .01) return '';
     const color = temperatureColor(o.temperature || p.kelvin, p.glow);
     const radius = (p.radius || 36) * clamp(o.spread || 1, .35, 3);
-    const id = `glow-${svgEscape(o.id)}`;
-    let shape = `<circle r="${radius}" fill="url(#${id})"/>`;
-    let transform = `translate(${o.x} ${o.y}) rotate(${o.rotation || 0})`;
-    if (p.effect === 'directional') shape = `<ellipse cx="${radius * .42}" rx="${radius * 1.65}" ry="${radius * .68}" fill="url(#${id})"/>`;
-    else if (p.effect === 'linear' || p.effect === 'linearLong') shape = `<ellipse rx="${radius * (p.effect === 'linearLong' ? 1.85 : 1.35)}" ry="${radius * .58}" fill="url(#${id})"/>`;
-    else if (p.effect === 'strip') shape = `<ellipse rx="${radius * 2.25}" ry="${radius * .48}" fill="url(#${id})"/>`;
-    return `<g transform="${transform}" style="mix-blend-mode:screen"><defs><radialGradient id="${id}"><stop offset="0" stop-color="${color}" stop-opacity="${.62 * strength}"/><stop offset=".22" stop-color="${color}" stop-opacity="${.38 * strength}"/><stop offset=".58" stop-color="${color}" stop-opacity="${.13 * strength}"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></radialGradient></defs>${shape}</g>`;
+    const transform = `translate(${o.x} ${o.y}) rotate(${o.rotation || 0})`;
+
+    let rx = radius, ry = radius, cx = 0;
+    if (p.effect === 'directional') { rx = radius * 1.65; ry = radius * .68; cx = radius * .42; }
+    else if (p.effect === 'linear' || p.effect === 'linearLong') { rx = radius * (p.effect === 'linearLong' ? 1.85 : 1.35); ry = radius * .58; }
+    else if (p.effect === 'strip') { rx = radius * 2.25; ry = radius * .48; }
+
+    const layers = 26;
+    const shapes = [];
+    for (let i = layers; i >= 1; i--) {
+      const t = i / layers;
+      const layerCx = cx ? cx * (.35 + .65 * t) : 0;
+      const opacity = Math.min(.085, strength * (.0035 + .023 * Math.pow(1 - t, 1.45)));
+      shapes.push(`<ellipse cx="${layerCx.toFixed(3)}" cy="0" rx="${(rx * t).toFixed(3)}" ry="${(ry * t).toFixed(3)}" fill="${color}" fill-opacity="${opacity.toFixed(5)}"/>`);
+    }
+
+    const coreCx = cx ? cx * .35 : 0;
+    shapes.push(`<ellipse cx="${coreCx.toFixed(3)}" cy="0" rx="${(rx * .16).toFixed(3)}" ry="${(ry * .16).toFixed(3)}" fill="${color}" fill-opacity="${Math.min(.30, .13 * strength).toFixed(5)}"/>`);
+    return `<g transform="${transform}">${shapes.join('')}</g>`;
   }
 
   function lightSvg(o) { const p = getProduct(o.productId), r = lightRadius(o), tr = `translate(${o.x} ${o.y}) rotate(${o.rotation || 0})`; if (p.shape === 'dot' || p.shape === 'dotLabel') return `<g transform="${tr}"><circle r="${r * .65}" fill="${p.color}"/>${p.shape === 'dotLabel' ? `<text x="${r}" y="2" font-size="${r * .85}" fill="#178a2d">SLS</text>` : ''}</g>`; if (p.shape === 'waterproof') return `<g transform="${tr}"><circle cy="-1.5" r="${r * .62}" fill="${p.color}"/><line x1="${-r}" y1="${r * .8}" x2="${r}" y2="${r * .8}" stroke="#111" stroke-width="1.5"/></g>`; if (p.shape.startsWith('track')) { const len = p.shape === 'trackLong' ? r * 4.8 : r * 3.3; return `<rect transform="${tr}" x="${-len / 2}" y="${-r * .38}" width="${len}" height="${r * .76}" fill="${p.color}"/>`; } if (p.shape.startsWith('linear')) { const len = p.shape === 'linearLong' ? r * 4.3 : r * 2.5; return `<rect transform="${tr}" x="${-len / 2}" y="${-r * .34}" width="${len}" height="${r * .68}" fill="#111"/>`; } if (p.shape === 'strip') return `<line transform="${tr}" x1="${-r * 2.4}" y1="0" x2="${r * 2.4}" y2="0" stroke="${p.color}" stroke-width="${r * .35}"/>`; if (p.shape === 'supply') return `<rect transform="${tr}" x="${-r * .65}" y="${-r * 1.25}" width="${r * 1.3}" height="${r * 2.5}" fill="${p.color}"/>`; return `<g transform="${tr}" stroke="#222" fill="none"><circle cy="${-r * .6}" r="${r * .35}" fill="#222"/><path d="M${-r} ${r * 1.2} L${-r * .4} 0 M0 ${r * 1.2} V0 M${r} ${r * 1.2} L${r * .4} 0"/></g>`; }
