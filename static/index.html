@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>A2Z Vector CAD - Lighting Planner</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark">A2Z</div>
+        <div class="brand-copy"><strong>LIGHT PLANNER</strong><span>Vector PDF CAD</span></div>
+      </div>
+      <div class="project-block">
+        <input id="projectTitle" value="مشروع إنارة - محرر هندسي" aria-label="اسم المشروع" />
+        <div class="source-line"><span id="sourceBadge" class="status-badge neutral">بانتظار ملف</span><span id="saveState">غير محفوظ</span></div>
+      </div>
+      <div class="top-actions">
+        <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+        <button id="uploadBtn" class="btn ghost">رفع PDF</button>
+        <button id="sampleBtn" class="btn ghost">فتح النموذج</button>
+        <button id="analysisBtn" class="btn ghost" disabled>تحليل الملف</button>
+        <button id="compareBtn" class="btn ghost">قبل / بعد</button>
+        <button id="saveBtn" class="btn ghost">حفظ</button>
+        <div class="export-wrap">
+          <button id="exportBtn" class="btn primary">تصدير <span>▾</span></button>
+          <div id="exportMenu" class="export-menu hidden">
+            <button data-export="pdf">PDF متجهي</button>
+            <button data-export="svg">SVG قابل للتحرير</button>
+            <button data-export="png">PNG عالية الدقة</button>
+            <button data-export="json">ملف المشروع JSON</button>
+            <button data-export="csv">جدول الكميات CSV</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="tool-rail" aria-label="أدوات الرسم">
+        <button class="tool active" data-tool="select" title="تحديد"><span>⌖</span><small>تحديد</small></button>
+        <button class="tool" data-tool="pan" title="تحريك"><span>✋</span><small>تحريك</small></button>
+        <div class="rail-sep"></div>
+        <button class="tool" data-tool="line" title="رسم خط"><span>╱</span><small>خط</small></button>
+        <button class="tool" data-tool="measure" title="قياس"><span>↔</span><small>قياس</small></button>
+        <button class="tool" data-tool="calibrate" title="معايرة"><span>⌁</span><small>معايرة</small></button>
+        <div class="rail-sep"></div>
+        <button class="tool" data-tool="light" title="إضافة إنارة"><span>●</span><small>إنارة</small></button>
+        <button class="tool" data-tool="distribute" title="توزيع متساوٍ"><span>•••</span><small>توزيع</small></button>
+        <div class="rail-spacer"></div>
+        <button id="deleteBtn" class="tool danger" title="حذف المحدد"><span>⌫</span><small>حذف</small></button>
+      </aside>
+
+      <section class="editor-column">
+        <div class="editor-toolbar">
+          <div class="toolbar-group">
+            <button id="fitBtn" class="icon-btn" title="ملاءمة المخطط">ملاءمة</button>
+            <button id="zoomOutBtn" class="icon-btn">−</button>
+            <span id="zoomValue" class="zoom-label">100%</span>
+            <button id="zoomInBtn" class="icon-btn">+</button>
+          </div>
+          <div class="toolbar-group center-info">
+            <span id="filePill">لم يتم فتح مخطط</span>
+            <span id="vectorPill" class="vector-pill">0 عنصر هندسي</span>
+          </div>
+          <div class="toolbar-group">
+            <label class="compact-select">التحديد
+              <select id="selectionFilter">
+                <option value="structural">خطوط كبيرة</option>
+                <option value="all">كل العناصر</option>
+              </select>
+            </label>
+            <label class="switch-line"><input id="snapToggle" type="checkbox" checked /> Snap</label>
+            <button id="darkPlanToggle" class="icon-btn mode-active" title="تبديل لون أرضية المخطط">◐ مخطط داكن</button>
+            <button id="simulationToggle" class="icon-btn simulation-active" title="تشغيل وإيقاف تأثير الإضاءة">💡 التأثير ON</button>
+            <button id="undoBtn" class="icon-btn" title="تراجع">↶</button>
+            <button id="redoBtn" class="icon-btn" title="إعادة">↷</button>
+          </div>
+        </div>
+
+        <div id="canvasStage" class="canvas-stage">
+          <canvas id="editorCanvas"></canvas>
+          <div id="emptyCanvas" class="empty-canvas">
+            <div class="empty-visual"><span></span><span></span><span></span></div>
+            <h2>استيراد مخطط PDF كعناصر هندسية</h2>
+            <p>الخطوط والمنحنيات والنصوص ستُقرأ كعناصر مستقلة، وليست صورة ثابتة.</p>
+            <div class="empty-actions"><button id="emptyUpload" class="btn primary">رفع ملف PDF</button><button id="emptySample" class="btn ghost">تجربة النموذج الحقيقي</button></div>
+          </div>
+          <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="loader-ring"></div>
+            <strong id="loadingTitle">جارٍ تحليل هندسة PDF...</strong>
+            <span id="loadingDetail">استخراج الخطوط والمنحنيات والنصوص</span>
+          </div>
+          <div id="selectionHud" class="selection-hud hidden">
+            <strong id="selectionCount">0</strong><span>عنصر محدد</span>
+            <button id="hudDelete">حذف</button><button id="hudClear">إلغاء</button>
+          </div>
+        </div>
+
+        <footer class="statusbar">
+          <div><span class="dot online"></span><span id="engineStatus">محرك Vector PDF جاهز</span></div>
+          <div id="cursorStatus">X: 0.00 &nbsp; Y: 0.00</div>
+          <div id="scaleStatus">المقياس: غير معاير</div>
+          <div id="selectionStatus">لا يوجد تحديد</div>
+        </footer>
+      </section>
+
+      <aside class="right-panel">
+        <nav class="panel-tabs">
+          <button class="panel-tab active" data-panel="products">المنتجات</button>
+          <button class="panel-tab" data-panel="layers">الطبقات</button>
+          <button class="panel-tab" data-panel="properties">الخصائص</button>
+          <button class="panel-tab" data-panel="boq">الكميات</button>
+        </nav>
+
+        <section id="panel-products" class="panel-content active">
+          <div class="panel-head"><div><strong>مكتبة الإنارة</strong><span>منتجات تجريبية من المشروع</span></div><span id="productCount">10</span></div>
+          <div class="search-box"><input id="productSearch" placeholder="بحث بالاسم أو الكود" /><span>⌕</span></div>
+          <div id="categoryChips" class="category-chips"></div>
+          <div id="productGrid" class="product-grid"></div>
+          <div class="panel-card distribution-card">
+            <div class="card-title">توزيع تلقائي</div>
+            <label>عدد الوحدات <input id="distributionCount" type="number" min="2" max="50" value="6" /></label>
+            <button id="startDistribution" class="wide-btn">حدد نقطتي التوزيع</button>
+          </div>
+          <div class="panel-card simulation-card">
+            <div class="card-title">معاينة الإضاءة</div>
+            <label>قوة العرض العامة <input id="masterLight" type="range" min="0.25" max="1.5" value="1" step="0.05" /></label>
+            <label class="effect-switch">إظهار تأثير الضوء <input id="effectsToggle" type="checkbox" checked /></label>
+            <small>معاينة بصرية لتوضيح الاتجاه والانتشار. حساب Lux الدقيق يحتاج ملفات IES وارتفاع السقف.</small>
+          </div>
+        </section>
+
+        <section id="panel-layers" class="panel-content">
+          <div class="panel-head"><div><strong>طبقات المشروع</strong><span>تحكم بعناصر PDF والإضافات</span></div></div>
+          <div class="layer-list">
+            <label><span class="layer-icon geometry"></span><div><strong>PDF Geometry</strong><small id="geometryCount">0 عنصر</small></div><input type="checkbox" data-layer="geometry" checked /></label>
+            <label><span class="layer-icon text"></span><div><strong>PDF Text</strong><small id="textCount">0 نص</small></div><input type="checkbox" data-layer="text" checked /></label>
+            <label><span class="layer-icon fill"></span><div><strong>Solid Fills</strong><small>تعبئات ومساحات</small></div><input type="checkbox" data-layer="fills" checked /></label>
+            <label><span class="layer-icon edits"></span><div><strong>User Geometry</strong><small>الخطوط والتعديلات الجديدة</small></div><input type="checkbox" data-layer="edits" checked /></label>
+            <label><span class="layer-icon lights"></span><div><strong>Lighting</strong><small>رموز وحدات الإنارة</small></div><input type="checkbox" data-layer="lights" checked /></label>
+            <label><span class="layer-icon effects"></span><div><strong>Light Effects</strong><small>انتشار وتأثير الضوء على المخطط</small></div><input type="checkbox" data-layer="effects" checked /></label>
+            <label><span class="layer-icon dimensions"></span><div><strong>Dimensions</strong><small>القياسات</small></div><input type="checkbox" data-layer="dimensions" checked /></label>
+          </div>
+          <div class="panel-card import-summary">
+            <div class="card-title">نتيجة الاستيراد</div>
+            <div><span>خطوط</span><strong id="statLines">0</strong></div>
+            <div><span>منحنيات</span><strong id="statCurves">0</strong></div>
+            <div><span>أشكال</span><strong id="statPolys">0</strong></div>
+            <div><span>نصوص</span><strong id="statTexts">0</strong></div>
+          </div>
+        </section>
+
+        <section id="panel-properties" class="panel-content">
+          <div id="noSelection" class="empty-panel"><div>⌖</div><strong>حدد عنصراً من المخطط</strong><p>يمكن حذف الخط الأصلي، تحريكه، أو تعديل نقاط نهايته.</p></div>
+          <div id="propertiesForm" class="properties-form hidden">
+            <div class="property-title"><div><strong id="propertyType">Line</strong><span id="propertyId">PDF Geometry</span></div><span id="propertyColor" class="color-dot"></span></div>
+            <label>الإحداثي X <input id="propX" type="number" step="0.1" /></label>
+            <label>الإحداثي Y <input id="propY" type="number" step="0.1" /></label>
+            <label id="propRotationRow">الدوران <input id="propRotation" type="number" step="1" /></label>
+            <label id="propScaleRow">حجم الرمز <input id="propScale" type="range" min="0.5" max="2.5" value="1" step="0.05" /></label>
+            <div id="lightEffectFields" class="light-effect-fields hidden">
+              <div class="effect-title"><span>تأثير الإضاءة</span><em id="effectStateLabel">مُشغّل</em></div>
+              <label>شدة الضوء <input id="propIntensity" type="range" min="0" max="1.5" value="1" step="0.05" /></label>
+              <label>نطاق الانتشار <input id="propSpread" type="range" min="0.45" max="2.5" value="1" step="0.05" /></label>
+              <label>حرارة اللون
+                <select id="propTemperature">
+                  <option value="2700">2700K دافئ</option>
+                  <option value="3000" selected>3000K دافئ</option>
+                  <option value="4000">4000K طبيعي</option>
+                  <option value="5000">5000K أبيض</option>
+                  <option value="6500">6500K بارد</option>
+                </select>
+              </label>
+              <label class="effect-switch">تشغيل الوحدة <input id="propLightOn" type="checkbox" checked /></label>
+            </div>
+            <div class="property-buttons"><button id="duplicateBtn">نسخ</button><button id="propertyDelete" class="danger-outline">حذف</button></div>
+            <div class="property-note">عند تحديد خط PDF واحد تظهر نقطتا نهاية يمكن سحبهما مباشرة.</div>
+          </div>
+        </section>
+
+        <section id="panel-boq" class="panel-content">
+          <div class="summary-grid">
+            <div><strong id="totalLights">0</strong><span>إجمالي الوحدات</span></div>
+            <div><strong id="usedTypes">0</strong><span>أنواع مستخدمة</span></div>
+          </div>
+          <div class="boq-wrap"><table><thead><tr><th>الرمز</th><th>المنتج</th><th>الكمية</th></tr></thead><tbody id="boqBody"><tr><td colspan="3" class="empty-row">لم تتم إضافة إنارة بعد</td></tr></tbody></table></div>
+          <button id="exportCsvBtn" class="wide-btn">تصدير جدول CSV</button>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="welcomeModal" class="modal-backdrop">
+    <div class="welcome-card">
+      <div class="welcome-logo">A2Z <span>VECTOR CAD</span></div>
+      <h1>محرر مخططات إنارة يقرأ خطوط PDF فعلياً</h1>
+      <p>هذا النموذج لا يمسح صورة. يقرأ المسارات المتجهية من PDF ويحوّل الخطوط والمنحنيات والنصوص إلى عناصر قابلة للتحديد والحذف والتعديل.</p>
+      <div class="feature-row"><span>PDF Vector Import</span><span>حذف جدار أو فاصل</span><span>تحرير نقاط الخط</span><span>Lighting BOQ</span></div>
+      <div class="welcome-actions"><button id="welcomeUpload" class="btn primary">رفع مخطط PDF</button><button id="welcomeSample" class="btn ghost">فتح النموذج المرفق</button></div>
+      <small>الديمو الحالي يثبت مسار PDF المتجهي. دعم DXF وDWG يُربط بالمحرك نفسه كمرحلة لاحقة.</small>
+    </div>
+  </div>
+
+  <div id="analysisModal" class="modal-backdrop hidden">
+    <div class="modal-card analysis-card">
+      <div class="modal-head"><div><h2>تحليل ملف PDF</h2><p id="analysisSubtitle">اختر الصفحة التي تريد استيرادها كعناصر هندسية.</p></div><button class="modal-close" data-close="analysisModal">×</button></div>
+      <div id="analysisOverview" class="analysis-overview"></div>
+      <div id="pagesGrid" class="pages-grid"></div>
+    </div>
+  </div>
+
+  <div id="compareModal" class="modal-backdrop hidden">
+    <div class="modal-card compare-card">
+      <div class="modal-head"><div><h2>مرجع المشروع قبل وبعد الإنارة</h2><p>المخطط الأصلي مقابل نتيجة توزيع الإنارة والكميات.</p></div><button class="modal-close" data-close="compareModal">×</button></div>
+      <div class="compare-grid"><figure><figcaption>قبل - المخطط الأصلي</figcaption><img src="/static/assets/sample_before.png" /></figure><figure><figcaption>بعد - مخطط الإنارة</figcaption><img src="/static/assets/sample_after.png" /></figure></div>
+    </div>
+  </div>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

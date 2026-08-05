@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: a2z-lighting-vector-demo
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: A2Z_NO_BROWSER
+        value: "1"
