@@ -8,6 +8,8 @@ Base branch: `phase-04-vector-pdf-poc`
 
 Fix branch: `poc01-pdf-closeout-fixes`
 
+Latest implementation commit at this update: `410132f71f159183dfa6f1aab5fd83f90110d014`
+
 ## Status
 
 The implementation fixes and automated/HTTP verification are complete on the dedicated fix branch. POC-01 is **not marked formally closed yet** because the strict acceptance list also requires one final interactive Chrome regression pass and replay against the two source videos. Those local Windows video files were not available to this execution environment and the browser harness blocked navigation to localhost. No POC-02 or DWG/DXF work has started.
@@ -45,7 +47,11 @@ The implementation fixes and automated/HTTP verification are complete on the ded
   - junction refresh/detach after movement;
   - preblended junction stroke color to prevent double-alpha darkening.
 - `static/app.js`
-  - integrates overlap cycling, locked-layer explanation, deletion/move history, Clean Junction, and normalized rendering/export.
+  - integrates overlap cycling, locked-layer explanation, deletion/move history, Clean Junction, normalized rendering/export;
+  - preserves Snap on endpoints/midpoints with constant visual tolerance and grid fallback;
+  - supports moving imported Path/Subpath entities as complete logical objects;
+  - includes user geometry/lights/dimensions in Window/Crossing rectangle selection;
+  - fixes the Redo history cursor so one Redo restores exactly one state.
 - `app.py`
   - serves normalized editable geometry schema v3 and uses a v3 vector cache.
 - `tests/`
