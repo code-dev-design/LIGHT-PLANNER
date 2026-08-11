@@ -18,8 +18,21 @@ let win=C.boxSelect([8,48,54,62],'window',idx,lookup,styles);assert(win.includes
 let cross=C.boxSelect([25,25,35,55],'crossing',idx,lookup,styles);assert(cross.includes('circle')&&cross.includes('rect'));
 let L=C.createJunction({t:'line',p:[0,0,10,0],bbox:[0,0,10,0]},{t:'line',p:[10.4,.3,10.4,10],bbox:[10.4,.3,10.4,10]},{tolerance:1});
 assert(L&&L.junction.type==='L');assert.notStrictEqual(L.a,L.b);
+assert.deepStrictEqual(L.a.p.slice(2),[10.4,0]);assert.deepStrictEqual(L.b.p.slice(0,2),[10.4,0]);
+const lPatch=C.junctionPatch(L.a,L.b,4,8,L.junction.point);
+assert(lPatch&&lPatch.length===4);
+const lBox=[Math.min(...lPatch.map(p=>p.x)),Math.min(...lPatch.map(p=>p.y)),Math.max(...lPatch.map(p=>p.x)),Math.max(...lPatch.map(p=>p.y))];
+assert.deepStrictEqual(lBox.map(n=>+n.toFixed(6)),[6.4,-2,14.4,2]);
+assert(C.pointInPolygon({x:12,y:-1},lPatch),'L outside quadrant must be filled by the junction patch');
+assert(!C.pointInPolygon({x:14.5,y:-1},lPatch),'junction patch must not protrude past the wider stroke face');
 let T=C.createJunction({t:'line',p:[0,5,10,5],bbox:[0,5,10,5]},{t:'line',p:[5,0,5,5.3],bbox:[5,0,5,5.3]},{tolerance:1});assert(T&&T.junction.type==='T');
 let X=C.createJunction({t:'line',p:[0,0,10,10],bbox:[0,0,10,10]},{t:'line',p:[0,10,10,0],bbox:[0,0,10,10]},{tolerance:.5});assert(X&&X.junction.type==='X');
+for(const j of [T,X]){const patch=C.junctionPatch(j.a,j.b,3,7,j.junction.point);assert(patch&&patch.length===4);assert(C.pointInPolygon(j.junction.point,patch));}
+assert.equal(C.junctionPatch({t:'line',p:[0,0,10,0]},{t:'line',p:[0,1,10,1]},4,4),null,'parallel lines cannot create a patch');
+const detached=C.detachJunctions([{id:'j1',a:'a',b:'b',active:true},{id:'j2',a:'c',b:'a',active:true},{id:'j3',a:'c',b:'d',active:true}],['a']);
+assert.equal(detached[0].active,false);assert.equal(detached[0].detachedReason,'member-deleted');assert.equal(detached[1].active,false);assert.equal(detached[2].active,true);
+const upserted=C.upsertJunction([{id:'old',a:'a',b:'b'},{id:'other-end',a:'a',b:'c'}],{id:'new',a:'b',b:'a'});
+assert.deepStrictEqual(upserted.map(j=>j.id),['other-end','new'],'rejoining one pair must preserve a junction at the other endpoint');
 assert.equal(C.preblendColor('#000000',.5,'#ffffff'),'rgb(128,128,128)');
 const big=[];for(let i=0;i<120000;i++){const x=(i%600)*3,y=Math.floor(i/600)*3;big.push({id:'e'+i,t:'line',p:[x,y,x+1,y],bbox:[x,y,x+1,y],s:0,seq:i});}
 const t0=performance.now(),bi=new C.SpatialIndex(12).build(big),build=performance.now()-t0,map=new Map(big.map(e=>[e.id,e]));let q0=performance.now(),hits=0;for(let i=0;i<1000;i++)hits+=C.hitCandidates({x:(i%600)*3+.5,y:Math.floor(i/600)*3},1,bi,k=>map.get(k),styles,{tolerancePx:3}).length;const query=performance.now()-q0;

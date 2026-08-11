@@ -1,6 +1,6 @@
 # POC-01 PDF Closeout - Actual Results
 
-Date: 2026-08-10
+Date: 2026-08-11
 
 Repository: `code-dev-design/LIGHT-PLANNER`
 
@@ -8,11 +8,13 @@ Base branch: `phase-04-vector-pdf-poc`
 
 Fix branch: `poc01-pdf-closeout-fixes`
 
-Latest implementation commit at this update: `410132f71f159183dfa6f1aab5fd83f90110d014`
+Starting branch commit for this pass: `0eb80855a29b40a88277ab59aac8a917d92d57ff`
 
 ## Status
 
-The implementation fixes and automated/HTTP verification are complete on the dedicated fix branch. POC-01 is **not marked formally closed yet** because the strict acceptance list also requires one final interactive Chrome regression pass and replay against the two source videos. Those local Windows video files were not available to this execution environment and the browser harness blocked navigation to localhost. No POC-02 or DWG/DXF work has started.
+The implementation fixes, automated verification, real-file regression, and the complete interactive Chrome workflow pass are complete on the dedicated fix branch. Chrome successfully opened the local application on `http://127.0.0.1:8765`, imported the real `ايهاب(1).pdf`, and completed the Select / Window / Crossing / Move / Delete / Undo / Redo / Add / Snap / L-T-X Clean Junction / Zoom / Pan / SVG-PDF-PNG export cycle.
+
+The engineering acceptance gates now pass. The supplied 2026-08-11 MP4 was replayed completely through a local HTTP media server and compared with the corrected live behavior. Formal administrative closure has only an optional evidence item: record a separate after-fix video if the client requires a packaged recording in addition to the completed Chrome pass and screenshots. No POC-02 or DWG/DXF work has started.
 
 ## Root causes fixed
 
@@ -44,16 +46,22 @@ The implementation fixes and automated/HTTP verification are complete on the ded
   - Window and Crossing selection;
   - line intersection and Clean Junction for L/T/X;
   - trim/extend of junction endpoints without merging object IDs;
+  - exact stroke-strip intersection patch for visually filled L/T/X junctions;
+  - different-width junction patch geometry without square-cap protrusions;
+  - deterministic junction detachment when either independent member is deleted;
   - junction refresh/detach after movement;
   - preblended junction stroke color to prevent double-alpha darkening.
 - `static/app.js`
   - integrates overlap cycling, locked-layer explanation, deletion/move history, Clean Junction, normalized rendering/export;
-  - preserves Snap on endpoints/midpoints with constant visual tolerance and grid fallback;
+  - preserves object Snap on endpoints/midpoints with constant visual tolerance, without forcing every free point onto a 5-point grid;
   - supports moving imported Path/Subpath entities as complete logical objects;
   - includes user geometry/lights/dimensions in Window/Crossing rectangle selection;
   - fixes the Redo history cursor so one Redo restores exactly one state.
+  - renders butt-capped independent members plus one junction patch in Canvas, SVG, PDF and PNG;
+  - restores the missing right-panel tab switching needed to isolate PDF and user geometry;
+  - detaches a junction in the same history command when one member is deleted.
 - `app.py`
-  - serves normalized editable geometry schema v3 and uses a v3 vector cache.
+  - serves normalized editable geometry schema v4 and uses a v4 vector cache.
 - `tests/`
   - real `ايهاب(1).pdf` normalization/calibration regression;
   - synthetic selection/junction/120k-index test.
@@ -62,23 +70,23 @@ The implementation fixes and automated/HTTP verification are complete on the ded
 
 Source PDF primitives: **128,827**
 
-Normalized editable entities: **35,258**
+Normalized editable entities: **34,618**
 
 This reduction is logical coalescing of connected primitives, not rasterization or deletion of the drawing.
 
 Normalized types:
 
-- Lines: 18,060
-- Polylines: 14,207
-- Paths: 1,943
+- Lines: 17,940
+- Polylines: 13,587
+- Paths: 2,051
 - Circles: 53
 - Ellipses: 1
-- Rectangles: 994
+- Rectangles: 986
 - PDF text spans: 306
 
-The left grid column contains **18 logical ring symbols** and the target region contains an independent ring, outlined number, line and polyline.
+The left grid column contains **18 logical ring symbols**. One complete target bubble now contains exactly three independently selectable logical parts: double ring, outlined numeral, and small marker. The marker itself coalesces six source fragments.
 
-Latest local extraction time observed: **3.20 s**.
+Latest local extraction time observed in the final automated run: **4.302 s reported / 4.341 s wall time**.
 
 HTTP run on the same machine:
 
@@ -118,7 +126,7 @@ On the actual target fixture extracted from `ايهاب(1).pdf`:
 
 ## Spatial-index performance
 
-Actual normalized file (35,258 entities):
+Actual normalized file (34,618 entities):
 
 - index build: 90.47 ms in the recorded run;
 - 2,000 point queries: 39.29 ms total;
@@ -136,7 +144,57 @@ These numbers are local development measurements, not production SLA guarantees.
 
 ## Junction tests
 
-Automated geometry tests pass for L, T and X. Each result retains two independent objects (`A != B`) and stores the Junction as a relation. The rendering/export path applies the junction correction while preserving independent widths and IDs. The alpha test confirms a 50% black stroke preblended over white produces `rgb(128,128,128)` once, avoiding double-opacity darkening at the junction.
+Automated geometry tests pass for L, T and X. Each result retains two independent objects (`A != B`) and stores the Junction as a relation. The final renderer no longer uses square caps as a visual approximation. It uses butt-capped independent strokes and a parallelogram computed from the exact intersection of both stroke strips, using both line widths. This fills the outside L quadrant without a gap or protrusion and normalizes the overlap at T/X. The same patch is emitted to Canvas, SVG, PDF and PNG. The alpha test confirms a 50% black stroke preblended over white produces `rgb(128,128,128)` once, avoiding double-opacity darkening at the junction.
+
+The synthetic Chrome fixture contained six independently identified lines and three active Junction relations (`L,T,X`). The exported SVG contained six joined custom `<line>` elements, three junction patch polygons, 13,657 butt caps in total, and zero square caps. Endpoint error for both L members and the T terminal member was exactly `0` in the exported project JSON.
+
+Deleting one L member left the other line in the model, changed the relation to `active=false` with `detachedReason=member-deleted`, and did not render a ghost patch. Undo restored two distinct line IDs and the active L relationship.
+
+## Interactive Chrome acceptance - 2026-08-10 (historical schema v3 pass)
+
+Environment:
+
+- Chrome through the connected user browser;
+- local URL: `http://127.0.0.1:8765`;
+- server health: PyMuPDF 1.26.7, schema 3;
+- branch start: `poc01-pdf-closeout-fixes` at `0eb8085`.
+
+Synthetic sample results:
+
+- sample import: `32,798 -> 13,651 editable`;
+- Window Selection isolated exactly two L members after hiding PDF geometry/text;
+- L toast: `Clean Junction: L - filled corner` and visual inspection at 345% showed a square, filled corner with no marker, gap or protrusion;
+- T and X each selected as exactly two members and rendered cleanly;
+- Zoom exercised from 56% to 345%; Pan preserved zoom while moving the viewport;
+- line add used Snap for the shared endpoint;
+- junction Undo/Redo, single-line Delete/Undo/Redo, and member deletion/detachment passed.
+
+Real `ايهاب(1).pdf` Chrome results:
+
+- import: `128,827 -> 35,258 editable`, plus 306 PDF text spans;
+- repeated click at the target column cycled through nine overlapping candidates (`2/9`, `3/9`) instead of being stuck on the first primitive;
+- a narrow Window selected one fully contained logical item; the reverse Crossing rectangle selected 108 touched items including the long dimension/grid geometry;
+- deleting one target entity changed the geometry count `35,258 -> 35,257`; Undo restored `35,258`, Redo returned `35,257`, and the final Undo restored `35,258`;
+- moving one independently selected target symbol and Undo both completed;
+- locking PDF Geometry showed the explicit reason `geometry layer locked` when selection was attempted.
+
+Export results from the six-line L/T/X fixture:
+
+| Format | Result | Size |
+|---|---:|---:|
+| SVG | PASS | 2,315,182 bytes |
+| PDF | PASS | 248,806 bytes |
+| PNG | PASS | 1,090,551 bytes |
+| Project JSON | PASS | 2,971 bytes |
+
+The exported PDF was rasterized through Poppler at 144 dpi and visually inspected. The PDF and high-resolution PNG both preserved the filled L, clean T, and clean X without a green marker, white gap, square-cap spur, or double-alpha dark square.
+
+Latest synthetic 120,000-entity run after the final changes:
+
+- index build: **184.06 ms**;
+- 1,000 queries: **40.44 ms**;
+- full Node test process: **711.16 ms**;
+- failures: **0**.
 
 ## Multi-page classification smoke test
 
@@ -145,10 +203,56 @@ Automated geometry tests pass for L, T and X. Each result retains two independen
 
 Observed analysis times: 7.725 s and 4.934 s respectively.
 
-## Remaining acceptance before formal POC-01 closure
+## Visual, lighting, measurement and symbol regression pass - 2026-08-11
 
-1. Run the committed fix branch in real Google Chrome and perform one complete interactive pass: Select -> overlap cycle -> Window/Crossing -> move -> delete -> Undo/Redo -> line add -> Snap -> Clean Junction -> Zoom/Pan -> SVG/PDF/PNG export.
-2. Replay the two original problem videos side by side with the fixed branch. The Windows-path MP4 files were not accessible in this environment.
-3. Record a short after-fix screen capture and confirm export appearance at several zoom levels.
+The supplied 18-second Chrome recording was reviewed through a local HTTP media server. It confirmed two measurement defects: every pointer position fell back to a fixed 5-point grid when no object snap was present, and the resulting red dimension line had no numeric label.
 
-Until those three manual evidence items are complete, the branch is ready for acceptance but POC-01 should not be marked formally closed. Do not start POC-02 or DWG/DXF.
+Implemented corrections:
+
+- achromatic or low-contrast PDF strokes are mapped to a stable engineering palette by logical type while original meaningful colors are preserved;
+- Dark Plan and Light Plan now switch the actual canvas and exported background, with readable type colors in both modes;
+- the global lighting effect button, the panel checkbox, master intensity, per-unit on/off, intensity, spread and temperature controls are wired to the renderer;
+- lighting units render a visible warm/cool radial effect in Canvas; SVG/PDF uses a PyMuPDF-compatible multi-ring alpha falloff because PyMuPDF rendered SVG `radialGradient` as black;
+- Measure is free-point input even while object Snap is enabled, has no forced grid fallback, shows its value live during dragging, and stores a labeled dimension with end ticks;
+- uncalibrated dimensions explicitly report `pt`; calibrated dimensions report `cm`;
+- one double-ring numbered symbol is normalized to three logical parts instead of 7-10 raw fragments;
+- the welcome modal now closes after a real uploaded PDF page is imported;
+- dimensions and lights are included in SVG, PDF and PNG exports.
+
+Chrome results on the isolated current server at `http://127.0.0.1:8766`:
+
+- `ايهاب(1).pdf`: `128,827 -> 34,618 editable`, schema v4, 4.515-6.535 s cold import depending on cache state;
+- `ARCH - 01 (26).pdf`, page 5: `15,423 -> 7,584 editable`, 1.497 s import;
+- Dark to Light background switch: PASS, button label changed and visual background/plan colors changed;
+- global Lighting Effect ON/OFF: PASS, button label, checkbox state and visible glow changed;
+- per-unit on/off: PASS, state label changed to `متوقف`, glow disappeared, and the symbol remained as an off-state unit;
+- free diagonal measurement: PASS, live/stored label `259.90 pt` observed;
+- measurement Undo removed the complete dimension; Redo restored line, ticks and label: PASS;
+- Zoom exercised from 40% to 66%; Pan moved the viewport and Fit returned to 40%: PASS;
+- no browser console errors during either real-file pass.
+
+Exports produced from the real `ايهاب(1).pdf` Chrome pass:
+
+| Format | Result | Size |
+|---|---:|---:|
+| SVG | PASS | 7,420,348 bytes |
+| PDF | PASS | 678,205 bytes |
+| PNG | PASS | 2,471,376 bytes |
+
+The exported A2 PDF was rendered with Poppler at 140 dpi and inspected. It preserved the engineering palette, PDF text, placed lighting unit and labeled dimension. A separate PyMuPDF conversion test verified the final multi-ring lighting falloff without the black radial-gradient compatibility defect.
+
+Latest automated results:
+
+- real file calibration average error: 0.108%; maximum error: 0.191%;
+- target bubble logical parts: 3;
+- total normalized symbol markers: 120;
+- 120,000 synthetic index build: 155.65-197.33 ms across recorded runs;
+- 1,000 synthetic hit queries: 33.09-35.05 ms;
+- Node and Python failures: 0.
+
+## Remaining evidence before administrative closure
+
+1. Record a short after-fix screen capture only if the client requires a separate video artifact in addition to the completed live Chrome pass and screenshots.
+2. The supplied 2026-08-11 regression MP4 was replayed completely through a local HTTP media server. The earlier two junction/selection recordings can still be placed side by side with a new capture if a formal video package is required.
+
+All code, geometry, accuracy, performance, browser-interaction and export gates exercised in this pass are green. Do not start POC-02 or DWG/DXF until the client accepts the remaining video-evidence item or explicitly waives it.

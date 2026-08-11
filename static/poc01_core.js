@@ -68,7 +68,24 @@
   function createJunction(a,b,opts={}){const tol=opts.tolerance??4,ix=lineIntersection(a,b);if(!ix)return null;const A=lineGeom(a),B=lineGeom(b),la=Math.hypot(A.b.x-A.a.x,A.b.y-A.a.y),lb=Math.hypot(B.b.x-B.a.x,B.b.y-B.a.y),ea=endpointState(ix.t,la,tol),eb=endpointState(ix.u,lb,tol),ext=Math.max(tol/Math.max(la,1),tol/Math.max(lb,1),.025);if(ix.t<-ext||ix.t>1+ext||ix.u<-ext||ix.u>1+ext)return null;let type='X';if(ea!==null&&eb!==null)type='L';else if(ea!==null||eb!==null)type='T';let aa=JSON.parse(JSON.stringify(a)),bb=JSON.parse(JSON.stringify(b));if(type==='L'){aa=setEndpoint(aa,ea,ix);bb=setEndpoint(bb,eb,ix);}else if(type==='T'){if(ea!==null)aa=setEndpoint(aa,ea,ix);if(eb!==null)bb=setEndpoint(bb,eb,ix);}return{a:aa,b:bb,junction:{type,point:{x:ix.x,y:ix.y},aEndpoint:ea,bEndpoint:eb}};}
   function refreshJunction(a,b,j,opts={}){const next=createJunction(a,b,opts);if(!next)return{detached:true,a,b,junction:null};const maxMove=opts.maxMove??20;if(Math.hypot(next.junction.point.x-j.point.x,next.junction.point.y-j.point.y)>maxMove)return{detached:true,a,b,junction:null};return{detached:false,...next};}
 
+  // Returns the exact intersection of the two infinite stroke strips. Drawing this
+  // polygon over butt-capped members fills the missing L quadrant without the
+  // protrusions that square caps create, and also normalizes T/X alpha overlap.
+  function junctionPatch(a,b,widthA,widthB,point=null,opts={}){
+    const A=lineGeom(a),B=lineGeom(b),ix=point||lineIntersection(a,b);if(!A||!B||!ix)return null;
+    const adx=A.b.x-A.a.x,ady=A.b.y-A.a.y,bdx=B.b.x-B.a.x,bdy=B.b.y-B.a.y,al=Math.hypot(adx,ady),bl=Math.hypot(bdx,bdy);if(al<1e-9||bl<1e-9)return null;
+    const na={x:-ady/al,y:adx/al},nb={x:-bdy/bl,y:bdx/bl},det=na.x*nb.y-na.y*nb.x,minSin=opts.minSin??.08;if(Math.abs(det)<minSin)return null;
+    const ha=Math.max(0,Number(widthA)||0)/2,hb=Math.max(0,Number(widthB)||0)/2;if(ha<=0||hb<=0)return null;
+    const solve=(da,db)=>({x:ix.x+(da*nb.y-na.y*db)/det,y:ix.y+(na.x*db-da*nb.x)/det});
+    const polygon=[solve(-ha,-hb),solve(ha,-hb),solve(ha,hb),solve(-ha,hb)],limit=(opts.miterLimit??8)*Math.max(ha,hb);
+    if(polygon.some(p=>Math.hypot(p.x-ix.x,p.y-ix.y)>limit))return null;
+    return polygon;
+  }
+  function pointInPolygon(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j],hit=(a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x;if(hit)inside=!inside;}return inside;}
+  function detachJunctions(junctions,removedKeys){const removed=removedKeys instanceof Set?removedKeys:new Set(removedKeys||[]);return(junctions||[]).map(j=>removed.has(j.a)||removed.has(j.b)?{...j,active:false,detachedReason:'member-deleted'}:j);}
+  function upsertJunction(junctions,next){const samePair=j=>(j.a===next.a&&j.b===next.b)||(j.a===next.b&&j.b===next.a);return[...(junctions||[]).filter(j=>!samePair(j)),next];}
+
   function parseHex(c){if(!c)return null;const m=String(c).match(/^#([0-9a-f]{6})$/i);if(!m)return null;const n=parseInt(m[1],16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
   function preblendColor(color,alpha,bg){const c=parseHex(color)||{r:0,g:0,b:0},b=parseHex(bg)||{r:255,g:255,b:255},a=clamp(alpha,0,1),v=x=>Math.round(x);return `rgb(${v(c.r*a+b.r*(1-a))},${v(c.g*a+b.g*(1-a))},${v(c.b*a+b.b*(1-a))})`;}
-  return {clamp,expand,intersects,contains,pointIn,distSeg,entitySegments,distanceToEntity,entityIntersectsBox,SpatialIndex,hitCandidates,boxSelect,lineIntersection,createJunction,refreshJunction,setEndpoint,preblendColor};
+  return {clamp,expand,intersects,contains,pointIn,distSeg,entitySegments,distanceToEntity,entityIntersectsBox,SpatialIndex,hitCandidates,boxSelect,lineIntersection,createJunction,refreshJunction,junctionPatch,pointInPolygon,detachJunctions,upsertJunction,setEndpoint,preblendColor};
 });

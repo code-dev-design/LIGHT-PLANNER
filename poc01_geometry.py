@@ -164,6 +164,78 @@ def group_ring_symbols(es,styles):
     for i,e in enumerate(out): e['id']=f'e{i}'
     return out
 
+def entity_subpaths(e):
+    """Convert a small logical component to path subpaths without flattening it."""
+    if e['t']=='path': return e.get('subpaths',[])
+    if e['t']=='line':
+        return [{'commands':[['l',e['p'][:2],e['p'][2:4]]],'closed':False}]
+    if e['t']=='polyline':
+        pts=[[e['p'][k],e['p'][k+1]] for k in range(0,len(e['p']),2)]
+        cs=[['l',pts[k],pts[k+1]] for k in range(len(pts)-1)]
+        if e.get('closed') and len(pts)>2: cs.append(['l',pts[-1],pts[0]])
+        return [{'commands':cs,'closed':bool(e.get('closed'))}]
+    if e['t']=='rect':
+        x,y,w,h=e['x'],e['y'],e['w'],e['h']; pts=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]
+        return [{'commands':[['l',pts[k],pts[(k+1)%4]] for k in range(4)],'closed':True}]
+    return []
+
+def merged_component(ms,role):
+    subs=[]; source=[]
+    for e in ms:
+        subs+=entity_subpaths(e)
+        source+=e.get('source_ids') or [e['id']]
+    first=min(ms,key=lambda e:e.get('seq',0))
+    return {'id':'tmp','t':'path','subpaths':subs,'bbox':bbox_union([e['bbox'] for e in ms]),
+            's':first['s'],'path':first.get('path',-1),'layer':first.get('layer','PDF_Geometry'),
+            'seq':min(e.get('seq',0) for e in ms),'role':role,'source_ids':source}
+
+def group_ring_contents(es,styles):
+    """Normalize a dimension bubble to ring + glyph + marker logical entities.
+
+    CAD PDFs commonly expand one numeral and its small leader marker into many
+    independent vector fragments.  The double ring stays independent from the
+    numeral and marker, while each of those visual parts becomes one selectable
+    entity.  This prevents one bubble from reporting 7-10 selected primitives.
+    """
+    used=set(); replacements=[]; cell=24.0; buckets={}
+    for i,e in enumerate(es):
+        eb=e['bbox']; key=(math.floor(((eb[0]+eb[2])/2)/cell),math.floor(((eb[1]+eb[3])/2)/cell))
+        buckets.setdefault(key,[]).append(i)
+    rings=[(i,e) for i,e in enumerate(es) if e.get('role')=='ring_symbol']
+    for ri,ring in rings:
+        b=ring['bbox']; w=b[2]-b[0]; h=b[3]-b[1]
+        if w<=0 or h<=0: continue
+        cx=(b[0]+b[2])/2; cy=(b[1]+b[3])/2
+        glyph=[]; marker=[]; reach=max(w,h)*1.25
+        x0=math.floor((cx-reach)/cell); x1=math.floor((cx+reach)/cell)
+        y0=math.floor((cy-reach)/cell); y1=math.floor((cy+reach)/cell)
+        nearby={i for gx in range(x0,x1+1) for gy in range(y0,y1+1) for i in buckets.get((gx,gy),())}
+        for i in nearby:
+            e=es[i]
+            if i==ri or i in used or e.get('role')=='ring_symbol': continue
+            eb=e['bbox']; ew=eb[2]-eb[0]; eh=eb[3]-eb[1]
+            ecx=(eb[0]+eb[2])/2; ecy=(eb[1]+eb[3])/2
+            central=abs(ecx-cx)<=w*.30 and abs(ecy-cy)<=h*.34
+            small=ew<=w*.72 and eh<=h*.72 and e['t'] in ('line','polyline','path','rect')
+            if central and small:
+                glyph.append((i,e)); continue
+            adjacent=eb[0]<=b[2]+w*.22 and eb[2]>=b[0]-w*.22 and eb[1]<=b[3]+h*.22 and eb[3]>=b[1]-h*.22
+            tiny=max(ew,eh)<=max(w,h)*.36 and min(ew,eh)<=max(w,h)*.24
+            if adjacent and tiny and e['t'] in ('line','polyline','path','rect'):
+                marker.append((i,e))
+        if glyph:
+            ids=[i for i,_ in glyph]; ms=[e for _,e in glyph]
+            used.update(ids); replacements.append((min(ids),merged_component(ms,'outlined_text')))
+        if len(marker)>=2:
+            ids=[i for i,_ in marker]; ms=[e for _,e in marker]
+            u=bbox_union([e['bbox'] for e in ms])
+            if u[2]-u[0]<=w*.65 and u[3]-u[1]<=h*.65:
+                used.update(ids); replacements.append((min(ids),merged_component(ms,'symbol_marker')))
+    out=[e for i,e in enumerate(es) if i not in used]+[e for _,e in replacements]
+    out.sort(key=lambda e:(e.get('seq',0),e.get('path',0),e.get('role','')))
+    for i,e in enumerate(out): e['id']=f'e{i}'
+    return out
+
 def serialize_text(page,m):
     out=[]; tid=0; data=page.get_text('dict',flags=fitz.TEXTFLAGS_TEXT)
     for b in data.get('blocks',[]):
@@ -191,6 +263,6 @@ def extract_editable_geometry(pdf_path:Path|str,page_index=0):
             source_items+=len(path.get('items',[])); sidx=smap[sk]; layer=path.get('layer') or 'PDF_Geometry'; seq=int(path.get('seqno') or pn)
             for sn,sub in enumerate(split_path(path,m)):
                 e=classify(sub); e.update({'id':f'e{len(es)}','s':sidx,'path':pn,'subpath':sn,'layer':layer,'seq':seq}); es.append(e)
-        pre=len(es); es=group_outlined_text(es,styles); es=group_ring_symbols(es,styles); texts=serialize_text(page,m)
+        pre=len(es); es=group_outlined_text(es,styles); es=group_ring_symbols(es,styles); es=group_ring_contents(es,styles); texts=serialize_text(page,m)
         st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'seconds':round(time.perf_counter()-started,3)}
         return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'stats':st}
