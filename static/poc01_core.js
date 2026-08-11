@@ -100,5 +100,19 @@
 
   function parseHex(c){if(!c)return null;const m=String(c).match(/^#([0-9a-f]{6})$/i);if(!m)return null;const n=parseInt(m[1],16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
   function preblendColor(color,alpha,bg){const c=parseHex(color)||{r:0,g:0,b:0},b=parseHex(bg)||{r:255,g:255,b:255},a=clamp(alpha,0,1),v=x=>Math.round(x);return `rgb(${v(c.r*a+b.r*(1-a))},${v(c.g*a+b.g*(1-a))},${v(c.b*a+b.b*(1-a))})`;}
-  return {clamp,expand,intersects,contains,pointIn,distSeg,entitySegments,distanceToEntity,entityIntersectsBox,SpatialIndex,hitCandidates,boxSelect,lineIntersection,createJunction,refreshJunction,junctionPatch,buildWallJunctions,pointInPolygon,detachJunctions,upsertJunction,setEndpoint,preblendColor};
+  function resizeBoxFromHandle(box,handle,p,minSize=.01){let [x0,y0,x1,y1]=box;const min=Math.max(1e-6,minSize);if(handle.includes('w'))x0=Math.min(p.x,x1-min);if(handle.includes('e'))x1=Math.max(p.x,x0+min);if(handle.includes('n'))y0=Math.min(p.y,y1-min);if(handle.includes('s'))y1=Math.max(p.y,y0+min);return[x0,y0,x1,y1];}
+  function resizeEntity(entity,from,to){const o=JSON.parse(JSON.stringify(entity)),fw=Math.max(1e-9,from[2]-from[0]),fh=Math.max(1e-9,from[3]-from[1]),tw=to[2]-to[0],th=to[3]-to[1],sx=tw/fw,sy=th/fh,map=(x,y)=>[to[0]+(x-from[0])*sx,to[1]+(y-from[1])*sy];
+    if(o.p)for(let i=0;i<o.p.length;i+=2)[o.p[i],o.p[i+1]]=map(o.p[i],o.p[i+1]);
+    if(o.t==='path')for(const sp of o.subpaths||[])for(const cmd of sp.commands||[])for(let i=1;i<cmd.length;i++)cmd[i]=map(cmd[i][0],cmd[i][1]);
+    if(o.cx!=null)[o.cx,o.cy]=map(o.cx,o.cy);
+    if(o.t==='rect'){o.x=to[0];o.y=to[1];o.w=tw;o.h=th;}
+    if(o.t==='circle'){const rx=Math.abs((o.r||0)*sx),ry=Math.abs((o.r||0)*sy);if(Math.abs(rx-ry)<=Math.max(rx,ry)*1e-6)o.r=(rx+ry)/2;else{o.t='ellipse';o.rx=rx;o.ry=ry;delete o.r;}}
+    else if(o.t==='ellipse'){o.rx=Math.abs((o.rx||0)*sx);o.ry=Math.abs((o.ry||0)*sy);}
+    if(o.t==='text'||o.type==='text'){[o.x,o.y]=map(o.x,o.y);o.size=Math.max(.5,(o.size||10)*Math.abs(sy));if(o.chars)for(const ch of o.chars){ch.dx=(ch.dx||0)*sx;ch.dy=(ch.dy||0)*sy;ch.width=(ch.width||0)*Math.abs(sx);}else o.scaleX=Math.max(.05,(o.scaleX||1)*Math.abs(sx)/Math.max(1e-9,Math.abs(sy)));}
+    if(o.type==='light'){[o.x,o.y]=map(o.x,o.y);o.scale=Math.max(.1,(o.scale||1)*Math.max(Math.abs(sx),Math.abs(sy)));}
+    o.bbox=[...to];if(o.p?.length===4)o.len=Math.hypot(o.p[2]-o.p[0],o.p[3]-o.p[1]);return o;
+  }
+  function distributionPoints(start,end,count,spacing=null){const n=Math.max(2,Math.floor(Number(count)||2)),dx=end.x-start.x,dy=end.y-start.y,len=Math.hypot(dx,dy);if(len<1e-9)return[];const out=[];if(Number.isFinite(spacing)&&spacing>0){const ux=dx/len,uy=dy/len;for(let i=0;i<n;i++)out.push({x:start.x+ux*spacing*i,y:start.y+uy*spacing*i});}else for(let i=0;i<n;i++){const t=i/(n-1);out.push({x:start.x+dx*t,y:start.y+dy*t});}return out;}
+  function convertLength(value,fromUnit,toUnit){const factors={m:1,cm:.01,mm:.001};if(!factors[fromUnit]||!factors[toUnit])return NaN;return Number(value)*factors[fromUnit]/factors[toUnit];}
+  return {clamp,expand,intersects,contains,pointIn,distSeg,entitySegments,distanceToEntity,entityIntersectsBox,SpatialIndex,hitCandidates,boxSelect,lineIntersection,createJunction,refreshJunction,junctionPatch,buildWallJunctions,pointInPolygon,detachJunctions,upsertJunction,setEndpoint,preblendColor,resizeBoxFromHandle,resizeEntity,distributionPoints,convertLength};
 });

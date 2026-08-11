@@ -52,6 +52,18 @@ const tooFar=C.buildWallJunctions([
  {key:'wall-b',entity:{t:'line',p:[13,1,13,10],bbox:[13,1,13,10],s:0,wall:true}}
 ],styles,{tolerance:1,maxCos:.1});assert.equal(tooFar.length,0,'automatic wall cleaning must not bridge a large drafting gap');
 assert.equal(C.preblendColor('#000000',.5,'#ffffff'),'rgb(128,128,128)');
+assert.deepStrictEqual(C.resizeBoxFromHandle([0,0,10,10],'se',{x:20,y:15}),[0,0,20,15]);
+const resizedRect=C.resizeEntity({t:'rect',x:0,y:0,w:10,h:5,bbox:[0,0,10,5]},[0,0,10,5],[0,0,20,15]);
+assert.deepStrictEqual([resizedRect.x,resizedRect.y,resizedRect.w,resizedRect.h,resizedRect.bbox],[0,0,20,15,[0,0,20,15]]);
+const resizedLine=C.resizeEntity({t:'line',p:[0,0,10,5],bbox:[0,0,10,5]},[0,0,10,5],[5,7,25,22]);
+assert.deepStrictEqual(resizedLine.p,[5,7,25,22]);
+const resizedCircle=C.resizeEntity({t:'circle',cx:5,cy:5,r:5,bbox:[0,0,10,10]},[0,0,10,10],[0,0,20,10]);
+assert.equal(resizedCircle.t,'ellipse');assert.equal(resizedCircle.rx,10);assert.equal(resizedCircle.ry,5);
+const resizedText=C.resizeEntity({type:'text',t:'text',text:'A',x:0,y:10,size:10,bbox:[0,0,10,10]},[0,0,10,10],[0,0,20,15]);
+assert.equal(resizedText.size,15);assert(Math.abs(resizedText.scaleX-4/3)<1e-9);assert.deepStrictEqual(resizedText.bbox,[0,0,20,15]);
+assert.deepStrictEqual(C.distributionPoints({x:0,y:0},{x:10,y:0},3,4),[{x:0,y:0},{x:4,y:0},{x:8,y:0}]);
+assert.deepStrictEqual(C.distributionPoints({x:0,y:0},{x:10,y:0},3),[{x:0,y:0},{x:5,y:0},{x:10,y:0}]);
+assert.equal(C.convertLength(1,'m','cm'),100);assert.equal(C.convertLength(25,'cm','m'),.25);
 const big=[];for(let i=0;i<120000;i++){const x=(i%600)*3,y=Math.floor(i/600)*3;big.push({id:'e'+i,t:'line',p:[x,y,x+1,y],bbox:[x,y,x+1,y],s:0,seq:i});}
 const t0=performance.now(),bi=new C.SpatialIndex(12).build(big),build=performance.now()-t0,map=new Map(big.map(e=>[e.id,e]));let q0=performance.now(),hits=0;for(let i=0;i<1000;i++)hits+=C.hitCandidates({x:(i%600)*3+.5,y:Math.floor(i/600)*3},1,bi,k=>map.get(k),styles,{tolerancePx:3}).length;const query=performance.now()-q0;
 console.log(JSON.stringify({ok:true,build_ms:+build.toFixed(2),query_1000_ms:+query.toFixed(2),hits,index_cells:bi.cells.size,overflow:bi.overflow.size}));

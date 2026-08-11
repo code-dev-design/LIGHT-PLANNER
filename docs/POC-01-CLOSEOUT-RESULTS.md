@@ -341,3 +341,44 @@ The client's explicit check on `FULL DRWAINGS.pdf` spans 78.45 PDF coordinates. 
 Measurement input now supports both drag and two-click placement. Object Snap uses endpoints, midpoints, centres and nearest projections with a screen-constant tolerance; it no longer moves the cursor through an arbitrary PDF/grid increment. Near-horizontal and near-vertical measurements receive an orthogonal constraint without changing the chosen start point.
 
 Final Chrome acceptance used real pointer clicks on the client's `3.28` endpoints with Snap enabled. Canvas and exported PDF both rendered `3.28 m`; Undo removed the dimension and Redo restored it. Zoom moved from 45% to 62%, Pan completed, and Fit returned to 45%. The final SVG was valid XML and contained the exact `3.28 m` label (3,203,680 bytes); PDF export was 306,371 bytes, one A3 vector page, and passed a fresh Poppler render; PNG export was 1,302,368 bytes at 2526 x 3573. Chrome reported zero console errors on the FULL, ARCH and Eihab acceptance tabs.
+
+The manual scale-correction dialog now uses formal, neutral engineering copy suitable for client demonstrations. Conversational gendered wording was removed from the heading, guidance, validation messages and confirmation action.
+
+## General editing and precise lighting distribution - 2026-08-11 (schema v7 / UI v17)
+
+The PDF editor now exposes the same direct editing workflow for imported geometry, imported text, user geometry, dimensions and lighting symbols:
+
+- one selected straight line exposes two endpoint handles plus an exact physical-length field;
+- rectangles, paths, polylines, circles, ellipses, text and symbols expose eight resize handles plus width/height fields;
+- changing one circle axis correctly produces an ellipse instead of corrupting its geometry;
+- any selected imported or user-created element can be duplicated; the duplicate receives an independent ID and remains independently editable;
+- duplicated wall geometry retains its wall classification and participates in automatic L/T/X junction rebuilding;
+- a new text tool creates editable text with content, font size and colour controls; original and new text can both be deleted;
+- Canvas, SVG, PDF and PNG render/export the duplicated CAD geometry and newly created text, including non-uniform text scaling.
+
+Precise lighting distribution accepts a unit count, spacing and unit (`m`, `cm`, or `mm`). The first canvas point fixes the start; the second fixes direction. For `n` units at spacing `d`, the total row length is `(n - 1) × d`. Leaving the spacing empty preserves the earlier endpoint-to-endpoint equal distribution mode.
+
+Chrome acceptance on `FULL DRWAINGS.pdf`, page 2:
+
+| Check | Result |
+|---|---|
+| Create line, edit exact length | `12.194 m -> 2.000 m` |
+| Duplicate edited line | independent duplicate remained `2.000 m` |
+| Add/edit/duplicate text | `ملاحظة إنارة`, 8 px-equivalent PDF text size, independent duplicate |
+| Lighting spacing | 3 units, 1 m spacing, 2 m total row |
+| Undo / Redo after distribution | `3 -> 0 -> 3` lighting units |
+| Theme / light effect | dark -> light -> dark; ON -> OFF -> ON |
+| Zoom | `40% -> 47% -> 40%` |
+| Console | zero application warnings or errors |
+
+`ايهاب(1).pdf` was re-imported in Chrome as `128,827 -> 34,618 editable` in 2.14 s with an automatic centimetre scale from 100 consensus comparisons. A direct click in the dense left-side symbol/grid area selected one logical element, not a nine-fragment accidental selection. The extraction regression still reports exactly three intended logical parts for a double-ring bubble (ring, outlined numeral and marker).
+
+Fresh UI exports after the editing pass:
+
+| Format | Result | File size |
+|---|---:|---:|
+| SVG | PASS | 3,206,466 bytes |
+| PNG | PASS | 1,398,102 bytes |
+| PDF | PASS | 309,157 bytes; `%PDF-` signature verified |
+
+The final scale-correction dialog is deliberately short and formal: it states when automatic scale is already available, asks only for reference value and unit, provides one neutral example, and uses `حفظ التصحيح`. The junction action is labelled `دمج الزوايا` with an L/T/X engineering tooltip. No DWG/DXF work was introduced.
