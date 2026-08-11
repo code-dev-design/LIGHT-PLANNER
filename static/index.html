@@ -218,7 +218,18 @@
     </div>
   </div>
 
+  <div id="calibrationModal" class="modal-backdrop hidden">
+    <div class="modal-card calibration-card" role="dialog" aria-modal="true" aria-labelledby="calibrationTitle">
+      <div class="modal-head"><div><h2 id="calibrationTitle">معايرة القياس</h2><p>استخدمي رقماً مكتوباً على المخطط، وليس طولاً مخمناً من الشاشة.</p></div><button id="calibrationClose" class="modal-close" type="button">×</button></div>
+      <div id="calibrationDetected" class="calibration-detected"></div>
+      <label class="calibration-field"><span>الرقم المكتوب على خط القياس</span><input id="calibrationValue" inputmode="decimal" placeholder="مثال: 4.00 أو 400" /></label>
+      <label class="calibration-field"><span>وحدة هذا الرقم</span><select id="calibrationUnit"><option value="m">متر (m)</option><option value="cm">سنتيمتر (cm)</option><option value="mm">ملّيمتر (mm)</option></select></label>
+      <p id="calibrationExample" class="calibration-help"></p>
+      <div class="calibration-actions"><button id="calibrationCancel" class="btn ghost" type="button">إلغاء</button><button id="calibrationConfirm" class="btn primary" type="button">اعتماد المعايرة</button></div>
+    </div>
+  </div>
+
   <div id="toastStack" class="toast-stack"></div>
-  <script src="/static/app.js?v=20260811-poc01-visual-measure-v7"></script>
+  <script src="/static/app.js?v=20260811-poc01-text-wall-scale-v10"></script>
 </body>
 </html>

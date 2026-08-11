@@ -61,7 +61,7 @@ The engineering acceptance gates now pass. The supplied 2026-08-11 MP4 was repla
   - restores the missing right-panel tab switching needed to isolate PDF and user geometry;
   - detaches a junction in the same history command when one member is deleted.
 - `app.py`
-  - serves normalized editable geometry schema v4 and uses a v4 vector cache.
+  - serves normalized editable geometry schema v6 and uses a v6 vector cache.
 - `tests/`
   - real `ايهاب(1).pdf` normalization/calibration regression;
   - synthetic selection/junction/120k-index test.
@@ -82,7 +82,7 @@ Normalized types:
 - Circles: 53
 - Ellipses: 1
 - Rectangles: 986
-- PDF text spans: 306
+- PDF text spans: 307
 
 The left grid column contains **18 logical ring symbols**. One complete target bubble now contains exactly three independently selectable logical parts: double ring, outlined numeral, and small marker. The marker itself coalesces six source fragments.
 
@@ -214,7 +214,7 @@ Implemented corrections:
 - the global lighting effect button, the panel checkbox, master intensity, per-unit on/off, intensity, spread and temperature controls are wired to the renderer;
 - lighting units render a visible warm/cool radial effect in Canvas; SVG/PDF uses a PyMuPDF-compatible multi-ring alpha falloff because PyMuPDF rendered SVG `radialGradient` as black;
 - Measure is free-point input even while object Snap is enabled, has no forced grid fallback, shows its value live during dragging, and stores a labeled dimension with end ticks;
-- uncalibrated dimensions explicitly report `pt`; calibrated dimensions report `cm`;
+- uncalibrated dimensions explicitly report `PDF - uncalibrated`; calibrated dimensions report the user-confirmed `m`, `cm`, or `mm` unit;
 - one double-ring numbered symbol is normalized to three logical parts instead of 7-10 raw fragments;
 - the welcome modal now closes after a real uploaded PDF page is imported;
 - dimensions and lights are included in SVG, PDF and PNG exports.
@@ -256,3 +256,68 @@ Latest automated results:
 2. The supplied 2026-08-11 regression MP4 was replayed completely through a local HTTP media server. The earlier two junction/selection recordings can still be placed side by side with a new capture if a formal video package is required.
 
 All code, geometry, accuracy, performance, browser-interaction and export gates exercised in this pass are green. Do not start POC-02 or DWG/DXF until the client accepts the remaining video-evidence item or explicitly waives it.
+
+## Text-layout, automatic wall-network and unit workflow pass - 2026-08-11 (schema v6)
+
+This pass addresses the final client regressions on the real architectural drawings.
+
+### PDF text layout and subset-font decoding
+
+- PDF text is no longer positioned as one browser-font string inside an RTL page. Each glyph uses the exact PDF baseline, rotation and relative origin, so Latin labels and numbers do not drift left or accumulate font-substitution error.
+- Canvas explicitly uses left-aligned LTR coordinates for Latin CAD text and shaped RTL rendering for Arabic text. SVG export uses the same glyph positions and fitted widths.
+- `get_texttrace()` glyph IDs recover printable ASCII from subset fonts with broken ToUnicode maps. The previously corrupted sample now decodes as `RISER = 16 cm`.
+- `FULL DRWAINGS.pdf`, page 2: 513 text spans, zero replacement glyphs in the regression check. The A-K grid labels are centered in their original bubbles in Chrome and in the exported PDF.
+
+### Automatic wall-network junctions
+
+Walls are identified from CAD layer semantics such as WALL / MASONRY / BLOCKWORK / PARTITION while hatch, finish, tile, text, dimension, note and symbol layers are excluded. Junction topology is rebuilt automatically when a page opens and after wall deletion or movement. Independent wall entities remain independent in the model; the renderer applies small endpoint extensions plus one exact intersection patch, eliminating gaps, cap protrusions and double-alpha overlap.
+
+Real-page results using the same production options (`tolerance=1.4`, `maxCos=0.2`, `minLength=2.5`):
+
+| Drawing | Wall entities | L | T | X | Total junctions | Build |
+|---|---:|---:|---:|---:|---:|---:|
+| `FULL DRWAINGS.pdf`, page 2 | 332 | 249 | 42 | 16 | 307 | 6.11 ms |
+| `ARCH - 01 (26).pdf`, page 5 | 4,715 | 4,941 | 242 | 2 | 5,185 | 185.05 ms |
+
+The synthetic tests also pass clean L, T and X cases, exclusion of non-wall annotation lines, and refusal to bridge a drafting gap larger than the strict tolerance.
+
+### Measurement and calibration workflow
+
+Raw PDF coordinates are not a physical length unit. Before calibration the editor therefore shows a value such as `96.78 PDF - uncalibrated`; it no longer labels that value `pt`. Calibration asks for the number printed on one known dimension and its written unit (`m`, `cm`, or `mm`). The stored scale is:
+
+`confirmed written length / selected PDF-coordinate distance`
+
+Every later measurement is converted using that scale and displays the confirmed unit. In the Chrome acceptance example, the 96.78-PDF segment was calibrated from the printed `3.78 m` dimension and subsequently displayed `3.780 m`. Undo removed the calibration and Redo restored it.
+
+Detected client-drawing conventions:
+
+| File / sheet family | Unit result |
+|---|---|
+| `FULL DRWAINGS.pdf` main architectural sheets | metres, explicitly written; some detail sheets separately state cm/mm |
+| `ARCH - 01 (26).pdf` | centimetres, explicitly written |
+| `ARCH DWG..pdf` | metres, explicitly written |
+| `ARCHITECTURAL DRAWING.pdf` | centimetres, explicitly written |
+| `ايهاب(1).pdf` | centimetres inferred from 97 dimension-like integer labels and confirmed by the known-dimension calibration |
+
+The application detects the unit per page and shows whether it is explicit or inferred; it does not assume one unit for an entire client package.
+
+### Chrome and export acceptance on schema v6
+
+Local acceptance server: `http://127.0.0.1:8767`, PyMuPDF 1.26.7, schema 6.
+
+- `FULL DRWAINGS.pdf`: `18,806 -> 14,714 editable`, 1.015 s cached Chrome load, explicit metre unit, 307 automatic wall junctions.
+- `ARCH - 01 (26).pdf`, page 5: `15,423 -> 7,584 editable`, 0.422 s cached Chrome load, explicit centimetre unit, 5,185 automatic wall junctions.
+- `ايهاب(1).pdf`: `128,827 -> 34,618 editable`, 2.476 s Chrome load, inferred centimetre unit, target double-ring symbol remains exactly three logical parts.
+- Undo/Redo after placing a lighting unit: `0 -> 1 -> 0 -> 1` units.
+- Dark/Light plan toggle: `dark -> light -> dark`; global lighting effect: `ON -> OFF -> ON`; selected-unit state: `true -> false -> true`.
+- Zoom, Pan, free-point measurement, Snap and calibration had already passed the interactive regression and remain on the same input/history code path in v6.
+
+Fresh real-page exports from Chrome:
+
+| Format | Result | Size / dimensions |
+|---|---:|---:|
+| SVG | PASS | 3,203,084 bytes; XML parsed successfully |
+| PDF | PASS | 306,149 bytes; rendered with Poppler at 180 dpi and visually inspected |
+| PNG | PASS | 1,303,629 bytes; 2526 x 3573 |
+
+The v6 PDF render preserves the original A-K positions, readable decoded CAD labels, automatic clean wall intersections and the engineering palette. Browser console error checks returned no application errors on the three retained acceptance tabs.

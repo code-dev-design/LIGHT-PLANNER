@@ -33,6 +33,24 @@ const detached=C.detachJunctions([{id:'j1',a:'a',b:'b',active:true},{id:'j2',a:'
 assert.equal(detached[0].active,false);assert.equal(detached[0].detachedReason,'member-deleted');assert.equal(detached[1].active,false);assert.equal(detached[2].active,true);
 const upserted=C.upsertJunction([{id:'old',a:'a',b:'b'},{id:'other-end',a:'a',b:'c'}],{id:'new',a:'b',b:'a'});
 assert.deepStrictEqual(upserted.map(j=>j.id),['other-end','new'],'rejoining one pair must preserve a junction at the other endpoint');
+const autoL=C.buildWallJunctions([
+ {key:'wall-a',entity:{t:'line',p:[0,0,10,0],bbox:[0,0,10,0],s:0,wall:true}},
+ {key:'wall-b',entity:{t:'line',p:[10.6,.4,10.6,10],bbox:[10.6,.4,10.6,10],s:0,wall:true}},
+ {key:'annotation',entity:{t:'line',p:[10.6,-5,10.6,5],bbox:[10.6,-5,10.6,5],s:0}}
+],styles,{tolerance:1,maxCos:.1});
+assert.equal(autoL.length,1);assert.equal(autoL[0].type,'L');assert(Math.abs(autoL[0].aLine.p[2]-10.6)<1e-9&&Math.abs(autoL[0].aLine.p[3])<1e-9);assert(Math.abs(autoL[0].bLine.p[0]-10.6)<1e-9&&Math.abs(autoL[0].bLine.p[1])<1e-9);
+const autoT=C.buildWallJunctions([
+ {key:'wall-a',entity:{t:'line',p:[0,5,10,5],bbox:[0,5,10,5],s:0,wall:true}},
+ {key:'wall-b',entity:{t:'line',p:[5,0,5,5.5],bbox:[5,0,5,5.5],s:0,wall:true}}
+],styles,{tolerance:1,maxCos:.1});assert.equal(autoT.length,1);assert.equal(autoT[0].type,'T');
+const autoX=C.buildWallJunctions([
+ {key:'wall-a',entity:{t:'line',p:[0,5,10,5],bbox:[0,5,10,5],s:0,wall:true}},
+ {key:'wall-b',entity:{t:'line',p:[5,0,5,10],bbox:[5,0,5,10],s:0,wall:true}}
+],styles,{tolerance:.5,maxCos:.1});assert.equal(autoX.length,1);assert.equal(autoX[0].type,'X');
+const tooFar=C.buildWallJunctions([
+ {key:'wall-a',entity:{t:'line',p:[0,0,10,0],bbox:[0,0,10,0],s:0,wall:true}},
+ {key:'wall-b',entity:{t:'line',p:[13,1,13,10],bbox:[13,1,13,10],s:0,wall:true}}
+],styles,{tolerance:1,maxCos:.1});assert.equal(tooFar.length,0,'automatic wall cleaning must not bridge a large drafting gap');
 assert.equal(C.preblendColor('#000000',.5,'#ffffff'),'rgb(128,128,128)');
 const big=[];for(let i=0;i<120000;i++){const x=(i%600)*3,y=Math.floor(i/600)*3;big.push({id:'e'+i,t:'line',p:[x,y,x+1,y],bbox:[x,y,x+1,y],s:0,seq:i});}
 const t0=performance.now(),bi=new C.SpatialIndex(12).build(big),build=performance.now()-t0,map=new Map(big.map(e=>[e.id,e]));let q0=performance.now(),hits=0;for(let i=0;i<1000;i++)hits+=C.hitCandidates({x:(i%600)*3+.5,y:Math.floor(i/600)*3},1,bi,k=>map.get(k),styles,{tolerancePx:3}).length;const query=performance.now()-q0;

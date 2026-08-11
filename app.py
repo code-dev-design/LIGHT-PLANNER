@@ -81,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
   try:
    if path=='/':return self.serve_file(STATIC_DIR/'index.html')
    if path.startswith('/static/'):return self.serve_file(STATIC_DIR/path[8:])
-   if path=='/api/health':return self.send_json({'status':'ok','engine':f"PyMuPDF {getattr(fitz,'__version__','')}",'mode':'poc01-normalized-vector-pdf-import','schema':4})
+   if path=='/api/health':return self.send_json({'status':'ok','engine':f"PyMuPDF {getattr(fitz,'__version__','')}",'mode':'poc01-normalized-vector-pdf-import','schema':6})
    if path=='/api/sample':return self.send_json(project_from_sample())
    m=re.fullmatch(r'/api/project/([A-Za-z0-9_-]+)/thumb/(\d+)',path)
    if m:
@@ -92,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
    if m:
     pid,ps=m.groups();pr=PROJECTS.get(pid)
     if not pr:return self.send_json({'detail':'Project not found'},404)
-    pi=int(ps);cache=CACHE_DIR/f'{pid}-vectors-v4-{pi}.json.gz'
+    pi=int(ps);cache=CACHE_DIR/f'{pid}-vectors-v6-{pi}.json.gz'
     if cache.exists():
      payload=cache.read_bytes();self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Encoding','gzip');self.send_header('Content-Length',str(len(payload)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(payload);return
     data=extract_editable_geometry(Path(pr['path']),pi);packed=gzip.compress(json.dumps(data,ensure_ascii=False,separators=(',',':')).encode(),6);cache.write_bytes(packed);self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Encoding','gzip');self.send_header('Content-Length',str(len(packed)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(packed);return

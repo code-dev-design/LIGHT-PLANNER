@@ -1,5 +1,5 @@
 from __future__ import annotations
-import math, time
+import math, re, time
 from pathlib import Path
 from typing import Any
 try:
@@ -8,6 +8,14 @@ except ImportError:
     import fitz  # type: ignore
 
 EPS=0.04
+
+WALL_LAYER_RE=re.compile(r'(^|[^A-Z])(WALLS?|MASONRY|BLOCK ?WORK|PARTITIONS?|MUR)([^A-Z]|$)',re.I)
+WALL_LAYER_EXCLUDE_RE=re.compile(r'(HATCH|RIZ|FINISH|TILE|TEXT|DIM|NOTE|SYMBOL)',re.I)
+
+def is_wall_layer(name):
+    """Identify architectural wall geometry without treating wall hatches/notes as walls."""
+    value=str(name or '').strip()
+    return bool(value and WALL_LAYER_RE.search(value) and not WALL_LAYER_EXCLUDE_RE.search(value))
 
 def xy(v):
     return (float(v.x),float(v.y)) if hasattr(v,'x') else (float(v[0]),float(v[1]))
@@ -237,20 +245,78 @@ def group_ring_contents(es,styles):
     return out
 
 def serialize_text(page,m):
-    out=[]; tid=0; data=page.get_text('dict',flags=fitz.TEXTFLAGS_TEXT)
-    for b in data.get('blocks',[]):
-        if b.get('type')!=0: continue
-        for ln in b.get('lines',[]):
-            d=ln.get('dir',(1,0))
-            for s in ln.get('spans',[]):
-                text=s.get('text','')
-                if not text.strip():continue
-                o=s.get('origin',(s['bbox'][0],s['bbox'][3])); p0=fitz.Point(*o)*m; p1=fitz.Point(o[0]+d[0],o[1]+d[1])*m
-                r=fitz.Rect(s['bbox']); cs=[fitz.Point(r.x0,r.y0)*m,fitz.Point(r.x1,r.y0)*m,fitz.Point(r.x1,r.y1)*m,fitz.Point(r.x0,r.y1)*m]
-                try: rgb=fitz.sRGB_to_rgb(int(s.get('color',0))); color=f'#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
-                except: color='#111111'
-                out.append({'id':f't{tid}','t':'text','text':text,'x':round(float(p0.x),3),'y':round(float(p0.y),3),'size':round(float(s.get('size',10)),3),'font':s.get('font','Arial'),'color':color,'angle':round(math.degrees(math.atan2(p1.y-p0.y,p1.x-p0.x)),3),'bbox':bbox([[c.x,c.y] for c in cs]),'layer':'PDF_Text','seq':tid}); tid+=1
+    """Serialize PDF text with its real baseline and per-glyph positions.
+
+    The editor UI is RTL, so relying on Canvas' inherited ``text-align:start``
+    moves Latin text to the left of its PDF origin.  Font substitution can then
+    accumulate another large error across a label.  Text-trace origins keep
+    every glyph anchored to the location authored in the PDF.  They also expose
+    glyph IDs, which let us recover printable ASCII from CAD subset fonts whose
+    broken ToUnicode map otherwise turns ``RISER = 16 cm`` into cipher text.
+    """
+    def decode(code,gid):
+        if code!=0xfffd:
+            try:return chr(code)
+            except ValueError:return '\ufffd'
+        # Standard TrueType glyph order: gid 3 is space, 4..97 are !..~.
+        # Only use this fallback when the PDF explicitly reports a missing
+        # Unicode value, so valid symbol / non-Latin fonts remain untouched.
+        return chr(gid+29) if 3<=gid<=97 else '\ufffd'
+
+    out=[]; tid=0
+    for s in page.get_texttrace():
+        raw=s.get('chars',()); chars=[decode(int(ch[0]),int(ch[1])) for ch in raw]
+        text=''.join(chars)
+        if not text.strip():continue
+        d=s.get('dir',(1,0)); o=raw[0][2] if raw else (s['bbox'][0],s['bbox'][3])
+        p0=tx(o,m); p1=tx((o[0]+d[0],o[1]+d[1]),m)
+        angle=math.atan2(p1[1]-p0[1],p1[0]-p0[0]); ca=math.cos(angle); sa=math.sin(angle)
+        r=fitz.Rect(s['bbox']); corners=[tx((r.x0,r.y0),m),tx((r.x1,r.y0),m),tx((r.x1,r.y1),m),tx((r.x0,r.y1),m)]
+        glyphs=[]
+        for ch,c in zip(raw,chars):
+            co=tx(ch[2],m); vx=co[0]-p0[0]; vy=co[1]-p0[1]
+            cr=fitz.Rect(ch[3]); cc=[tx((cr.x0,cr.y0),m),tx((cr.x1,cr.y0),m),tx((cr.x1,cr.y1),m),tx((cr.x0,cr.y1),m)]
+            projected=[(q[0]-co[0])*ca+(q[1]-co[1])*sa for q in cc]
+            glyphs.append({'c':c,'dx':round(vx*ca+vy*sa,3),'dy':round(-vx*sa+vy*ca,3),'width':round(max(projected)-min(projected),3)})
+        raw_color=s.get('color',(0,0,0))
+        if isinstance(raw_color,(tuple,list)) and len(raw_color)>=3:
+            rgb=[max(0,min(255,round(float(v)*255))) for v in raw_color[:3]]
+            color=f'#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
+        else: color='#111111'
+        font=str(s.get('font','Arial')); flags=int(s.get('flags',0) or 0)
+        weight=700 if re.search(r'(bold|black|demi|semibold)',font,re.I) or flags&16 else 400
+        italic=bool(re.search(r'(italic|oblique)',font,re.I) or flags&2)
+        out.append({'id':f't{tid}','t':'text','text':text,'x':p0[0],'y':p0[1],
+                    'size':round(float(s.get('size',10)),3),'font':font,'weight':weight,'italic':italic,
+                    'color':color,'angle':round(math.degrees(angle),3),'bbox':bbox(corners),
+                    'chars':glyphs,'rtl':bool(re.search(r'[\u0590-\u08ff]',text)),
+                    'layer':str(s.get('layer') or 'PDF_Text'),'seq':int(s.get('seqno',tid))}); tid+=1
     return out
+
+def detect_dimension_unit(page_text,texts):
+    """Return the sheet's written dimension unit and how confidently it was found."""
+    lines=[re.sub(r'\s+',' ',line).strip() for line in (page_text or '').splitlines()]
+    checks=[
+        ('cm',re.compile(r'(?:ALL\s+)?DIM(?:ENSION|ENSIONS|\.)[^\n]{0,45}(?:CENTIMET(?:ER|RE)S?|\bCM\b)',re.I)),
+        ('mm',re.compile(r'(?:ALL\s+)?DIM(?:ENSION|ENSIONS|\.)[^\n]{0,45}(?:MILLIMET(?:ER|RE)S?|\bMM\b)',re.I)),
+        ('m',re.compile(r'(?:ALL\s+)?DIM(?:ENSION|ENSIONS|\.)[^\n]{0,45}(?:\bMETERS?\b|\bMETRES?\b|\bIN\s+M\.)',re.I)),
+    ]
+    for unit,pattern in checks:
+        for line in lines:
+            if pattern.search(line): return {'unit':unit,'confidence':'explicit','evidence':line[:160]}
+    values=[]
+    for item in texts:
+        value=str(item.get('text','')).strip().replace(',','')
+        if re.fullmatch(r'\d+(?:\.\d+)?',value):
+            try: values.append(float(value))
+            except ValueError: pass
+    large=sum(80<=v<=2500 and abs(v-round(v))<1e-6 for v in values)
+    metres=sum(.1<=v<=40 and not float(v).is_integer() for v in values)
+    if large>=8 and large>=metres*1.5:
+        return {'unit':'cm','confidence':'inferred','evidence':f'{large} dimension-like integer labels'}
+    if metres>=8:
+        return {'unit':'m','confidence':'inferred','evidence':f'{metres} decimal dimension labels'}
+    return {'unit':None,'confidence':'unknown','evidence':''}
 
 def extract_editable_geometry(pdf_path:Path|str,page_index=0):
     started=time.perf_counter()
@@ -262,7 +328,10 @@ def extract_editable_geometry(pdf_path:Path|str,page_index=0):
                 smap[sk]=len(styles); styles.append({'stroke':sk[0],'fill':sk[1],'width':sk[2],'strokeAlpha':sk[3],'fillAlpha':sk[4],'dashes':sk[5]})
             source_items+=len(path.get('items',[])); sidx=smap[sk]; layer=path.get('layer') or 'PDF_Geometry'; seq=int(path.get('seqno') or pn)
             for sn,sub in enumerate(split_path(path,m)):
-                e=classify(sub); e.update({'id':f'e{len(es)}','s':sidx,'path':pn,'subpath':sn,'layer':layer,'seq':seq}); es.append(e)
+                e=classify(sub); e.update({'id':f'e{len(es)}','s':sidx,'path':pn,'subpath':sn,'layer':layer,'seq':seq})
+                if is_wall_layer(layer): e.update({'wall':True,'role':'wall'})
+                es.append(e)
         pre=len(es); es=group_outlined_text(es,styles); es=group_ring_symbols(es,styles); es=group_ring_contents(es,styles); texts=serialize_text(page,m)
-        st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'seconds':round(time.perf_counter()-started,3)}
-        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'stats':st}
+        unit=detect_dimension_unit(page.get_text('text') or '',texts)
+        st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'wall_entities':sum(bool(e.get('wall')) for e in es),'seconds':round(time.perf_counter()-started,3)}
+        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'dimension_unit':unit,'stats':st}
