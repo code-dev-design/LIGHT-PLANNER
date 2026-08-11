@@ -3,6 +3,7 @@ from pathlib import Path
 from poc01_geometry import extract_editable_geometry
 
 FULL_PDF = Path(os.environ["POC01_FULL_PDF"]) if os.environ.get("POC01_FULL_PDF") else None
+ARCH_PDF = Path(os.environ["POC01_ARCH_PDF"]) if os.environ.get("POC01_ARCH_PDF") else None
 
 PDF = Path(os.environ.get("POC01_PDF", "ايهاب(1).pdf"))
 
@@ -27,6 +28,10 @@ def main():
     assert st["source_items"]==128827, st
     assert st["texts"]==307, st
     assert data["dimension_unit"]["unit"]=="cm" and data["dimension_unit"]["confidence"]=="inferred", data["dimension_unit"]
+    scale,rows=calibration_test()
+    automatic=data["measurement_scale"]
+    assert automatic and automatic["unit"]=="cm" and automatic["confidence"]=="high", automatic
+    assert abs(automatic["scale"]-scale)/scale<=.002, automatic
     assert all(t.get("chars") for t in data["texts"]), "PDF text must preserve per-glyph origins"
     assert all(st[k]>0 for k in ("lines","polylines","paths","circles","ellipses","rectangles")), st
     target=[e for e in data["entities"] if e.get("role") and e["bbox"][2]<75 and 170<e["bbox"][1]<200]
@@ -38,7 +43,7 @@ def main():
     assert len(rings)==18, len(rings)
     assert sum(e.get("role")=="symbol_marker" for e in data["entities"])==120
     assert st["seconds"]<10, st["seconds"]
-    scale,rows=calibration_test(); avg=statistics.mean(r["error_pct"] for r in rows); mx=max(r["error_pct"] for r in rows)
+    avg=statistics.mean(r["error_pct"] for r in rows); mx=max(r["error_pct"] for r in rows)
     assert avg<=0.5 and mx<=1.0, (avg,mx,rows)
     full_report=None
     if FULL_PDF and FULL_PDF.exists():
@@ -48,10 +53,20 @@ def main():
         assert riser, "subset-font glyph IDs must recover the original CAD text"
         assert not any("\ufffd" in t["text"] for t in full_texts), "no undecoded subset-font glyphs"
         assert full["dimension_unit"]["unit"]=="m" and full["dimension_unit"]["confidence"]=="explicit"
+        auto=full["measurement_scale"]
+        assert auto and auto["confidence"]=="high" and auto["precision"]==2 and auto["samples"]>=20, auto
+        assert round(78.45*auto["scale"],2)==3.28, "the client's 3.28 m check must measure as 3.28 m"
         assert full["stats"]["wall_entities"]==332, full["stats"]
-        full_report={"texts":len(full_texts),"replacement_glyphs":0,"decoded_sample":riser["text"],"unit":full["dimension_unit"],"wall_entities":full["stats"]["wall_entities"]}
+        full_report={"texts":len(full_texts),"replacement_glyphs":0,"decoded_sample":riser["text"],"unit":full["dimension_unit"],"automatic_scale":auto,"client_3_28_check_m":round(78.45*auto["scale"],2),"wall_entities":full["stats"]["wall_entities"]}
+    arch_report=None
+    if ARCH_PDF and ARCH_PDF.exists():
+        arch=extract_editable_geometry(ARCH_PDF,4); auto=arch["measurement_scale"]
+        assert auto and auto["unit"]=="cm" and auto["confidence"]=="high" and auto["precision"]==0, auto
+        assert abs(auto["scale"]-4.70)/4.70<.005, auto
+        arch_report={"automatic_scale":auto,"unit":arch["dimension_unit"]}
     report={"source_items":st["source_items"],"editable_entities":st["entities"],"types":{k:st[k] for k in ("lines","polylines","paths","circles","ellipses","rectangles","texts")},"detected_dimension_unit":data["dimension_unit"],"extract_seconds_reported":st["seconds"],"extract_wall_seconds":wall,"target_symbol_logical_parts":len(target),"target_left_column_rings":len(rings),"all_symbol_markers":sum(e.get("role")=="symbol_marker" for e in data["entities"]),"calibration_cm_per_point":scale,"calibration_rows":rows,"calibration_avg_error_pct":avg,"calibration_max_error_pct":mx}
     if full_report: report["full_drawing_layout_regression"]=full_report
+    if arch_report: report["arch_drawing_measurement_regression"]=arch_report
     print(json.dumps(report,ensure_ascii=False,indent=2))
 
 if __name__=="__main__": main()

@@ -1,5 +1,6 @@
 from __future__ import annotations
-import math, re, time
+import math, re, statistics, time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 try:
@@ -318,6 +319,83 @@ def detect_dimension_unit(page_text,texts):
         return {'unit':'m','confidence':'inferred','evidence':f'{metres} decimal dimension labels'}
     return {'unit':None,'confidence':'unknown','evidence':''}
 
+def detect_measurement_scale(texts,unit_info):
+    """Infer the physical scale from repeated, printed dimension chains.
+
+    For two adjacent dimension segments, their text centres are separated by
+    half the sum of both physical lengths.  Therefore:
+
+        unit_per_pdf = (value_a + value_b) / (2 * centre_distance)
+
+    Architectural sheets contain many mirrored horizontal and vertical chains.
+    A consensus cluster across those independent pairs is substantially safer
+    than asking the user to type one reference length or trusting the PDF point
+    unit.  Ambiguous pages return no scale instead of a misleading measurement.
+    """
+    unit=(unit_info or {}).get('unit')
+    if unit not in {'m','cm','mm'}: return None
+    numeric=[]
+    for item in texts:
+        raw=str(item.get('text','')).strip().replace(' ','')
+        if not re.fullmatch(r'\d+(?:[.,]\d+)?',raw): continue
+        value_text=raw.replace(',','.')
+        try: value=float(value_text)
+        except ValueError: continue
+        if not (0<value<1_000_000): continue
+        if re.search(r'(GRID|TITLE|DOOR|WINDOW|ROOM|SHEET)',str(item.get('layer','')),re.I): continue
+        angle=float(item.get('angle',0))%180
+        orientation='h' if angle<12 or angle>168 else ('v' if 78<angle<102 else None)
+        if not orientation: continue
+        box=item.get('bbox') or [item.get('x',0),item.get('y',0)]*2
+        cx=(float(box[0])+float(box[2]))/2; cy=(float(box[1])+float(box[3]))/2
+        decimals=len(value_text.partition('.')[2]) if '.' in value_text else 0
+        numeric.append({'value':value,'raw':raw,'decimals':decimals,'orientation':orientation,
+                        'axis':cx if orientation=='h' else cy,'perp':cy if orientation=='h' else cx,
+                        'size':max(.1,float(item.get('size',6) or 6))})
+    candidates=[]
+    for orientation in ('h','v'):
+        groups=[]
+        for item in sorted((x for x in numeric if x['orientation']==orientation),key=lambda x:x['perp']):
+            group=None
+            for current in groups:
+                median_size=statistics.median(x['size'] for x in current)
+                tolerance=max(1.2,min(7.0,min(item['size'],median_size)*.65))
+                if abs(item['perp']-statistics.median(x['perp'] for x in current))<=tolerance and .72<=item['size']/median_size<=1.38:
+                    group=current; break
+            if group is None: groups.append([item])
+            else: group.append(item)
+        for group in groups:
+            ordered=sorted(group,key=lambda x:x['axis']); deduplicated=[]
+            for item in ordered:
+                if deduplicated and abs(item['axis']-deduplicated[-1]['axis'])<max(1.0,item['size']*.3): continue
+                deduplicated.append(item)
+            for first,second in zip(deduplicated,deduplicated[1:]):
+                distance=second['axis']-first['axis']
+                if distance<=max(2.0,min(first['size'],second['size'])*.75): continue
+                scale=(first['value']+second['value'])/(2*distance)
+                if math.isfinite(scale) and 1e-6<scale<1e5:
+                    candidates.append({'scale':scale,'first':first,'second':second})
+    if len(candidates)<6: return None
+    best=[]
+    for seed in candidates:
+        cluster=[x for x in candidates if abs(x['scale']-seed['scale'])/seed['scale']<=.025]
+        if len(cluster)>len(best): best=cluster
+        elif len(cluster)==len(best) and cluster and best:
+            cm=statistics.median(x['scale'] for x in cluster); bm=statistics.median(x['scale'] for x in best)
+            if statistics.median(abs(x['scale']-cm) for x in cluster)<statistics.median(abs(x['scale']-bm) for x in best): best=cluster
+    if len(best)<6 or len(best)<len(candidates)*.12: return None
+    scale=statistics.median(x['scale'] for x in best)
+    best=[x for x in candidates if abs(x['scale']-scale)/scale<=.025]
+    scale=statistics.median(x['scale'] for x in best)
+    relative_mad=statistics.median(abs(x['scale']-scale)/scale for x in best)
+    decimals=[item['decimals'] for row in best for item in (row['first'],row['second'])]
+    precision=Counter(decimals).most_common(1)[0][0] if decimals else (2 if unit=='m' else 0)
+    precision=max(0,min(3,precision))
+    confidence='high' if len(best)>=10 and relative_mad<=.015 else 'medium'
+    return {'scale':round(scale,10),'unit':unit,'precision':precision,'confidence':confidence,
+            'samples':len(best),'candidates':len(candidates),'relative_mad':round(relative_mad,6),
+            'source':'dimension-chain-consensus'}
+
 def extract_editable_geometry(pdf_path:Path|str,page_index=0):
     started=time.perf_counter()
     with fitz.open(pdf_path) as doc:
@@ -332,6 +410,6 @@ def extract_editable_geometry(pdf_path:Path|str,page_index=0):
                 if is_wall_layer(layer): e.update({'wall':True,'role':'wall'})
                 es.append(e)
         pre=len(es); es=group_outlined_text(es,styles); es=group_ring_symbols(es,styles); es=group_ring_contents(es,styles); texts=serialize_text(page,m)
-        unit=detect_dimension_unit(page.get_text('text') or '',texts)
+        unit=detect_dimension_unit(page.get_text('text') or '',texts); measurement_scale=detect_measurement_scale(texts,unit)
         st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'wall_entities':sum(bool(e.get('wall')) for e in es),'seconds':round(time.perf_counter()-started,3)}
-        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'dimension_unit':unit,'stats':st}
+        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'dimension_unit':unit,'measurement_scale':measurement_scale,'stats':st}

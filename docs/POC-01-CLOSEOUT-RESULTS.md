@@ -321,3 +321,23 @@ Fresh real-page exports from Chrome:
 | PNG | PASS | 1,303,629 bytes; 2526 x 3573 |
 
 The v6 PDF render preserves the original A-K positions, readable decoded CAD labels, automatic clean wall intersections and the engineering palette. Browser console error checks returned no application errors on the three retained acceptance tabs.
+
+## Automatic physical measurement correction - 2026-08-11 (schema v7)
+
+This pass supersedes the v6 manual-calibration workflow above. Normal measurement no longer asks the operator to type a known length and never presents raw PDF coordinates as a usable distance. The editor derives the page scale and original unit automatically from repeated printed dimension chains.
+
+For two adjacent dimension labels, the distance between their text centres equals half the sum of the two written lengths. The importer generates candidates from independent horizontal and vertical chains, rejects annotation/title/grid layers, and accepts only a dominant 2.5% consensus cluster with at least six supporting pairs. Ambiguous pages deliberately show `تعذر تحديد مقياس الصفحة` instead of a plausible but false number. The former calibration tool remains only as `تصحيح مقياس` for exceptional drawings that do not have one consistent scale.
+
+Real-page automatic results:
+
+| Drawing | Detected unit | Physical scale per PDF coordinate | Consensus pairs | Relative MAD | Confidence |
+|---|---:|---:|---:|---:|---:|
+| `FULL DRWAINGS.pdf`, page 2 | m | 0.0418197572 | 34 / 92 candidates | 0.1521% | high |
+| `ARCH - 01 (26).pdf`, page 5 | cm | 4.6997755331 | 27 / 41 candidates | 0.1686% | high |
+| `ايهاب(1).pdf`, page 1 | cm | 4.1835254178 | 100 / 118 candidates | 0.3645% | high |
+
+The client's explicit check on `FULL DRWAINGS.pdf` spans 78.45 PDF coordinates. The automatic conversion is `78.45 × 0.0418197572 = 3.28075 m`, rendered with the drawing's two-decimal convention as **`3.28 m`**. On `ايهاب(1).pdf`, the automatic scale differs from the independently verified 2980 cm grid-chain scale by about 0.068%.
+
+Measurement input now supports both drag and two-click placement. Object Snap uses endpoints, midpoints, centres and nearest projections with a screen-constant tolerance; it no longer moves the cursor through an arbitrary PDF/grid increment. Near-horizontal and near-vertical measurements receive an orthogonal constraint without changing the chosen start point.
+
+Final Chrome acceptance used real pointer clicks on the client's `3.28` endpoints with Snap enabled. Canvas and exported PDF both rendered `3.28 m`; Undo removed the dimension and Redo restored it. Zoom moved from 45% to 62%, Pan completed, and Fit returned to 45%. The final SVG was valid XML and contained the exact `3.28 m` label (3,203,680 bytes); PDF export was 306,371 bytes, one A3 vector page, and passed a fresh Poppler render; PNG export was 1,302,368 bytes at 2526 x 3573. Chrome reported zero console errors on the FULL, ARCH and Eihab acceptance tabs.
