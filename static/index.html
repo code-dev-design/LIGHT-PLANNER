@@ -81,17 +81,13 @@
         </div>
 
         <div id="canvasStage" class="canvas-stage">
+          <canvas id="baseCanvas" aria-hidden="true"></canvas>
           <canvas id="editorCanvas"></canvas>
           <div id="emptyCanvas" class="empty-canvas">
             <div class="empty-visual"><span></span><span></span><span></span></div>
             <h2>استيراد مخطط PDF كعناصر هندسية</h2>
             <p>الخطوط والمنحنيات والنصوص ستُقرأ كعناصر مستقلة، وليست صورة ثابتة.</p>
             <div class="empty-actions"><button id="emptyUpload" class="btn primary">رفع ملف PDF</button><button id="emptySample" class="btn ghost">تجربة النموذج الحقيقي</button></div>
-          </div>
-          <div id="loadingOverlay" class="loading-overlay hidden">
-            <div class="loader-ring"></div>
-            <strong id="loadingTitle">جارٍ تحليل هندسة PDF...</strong>
-            <span id="loadingDetail">استخراج الخطوط والمنحنيات والنصوص</span>
           </div>
           <div id="selectionHud" class="selection-hud hidden">
             <strong id="selectionCount">0</strong><span>عنصر محدد</span>
@@ -222,8 +218,8 @@
   </div>
 
   <div id="analysisModal" class="modal-backdrop hidden">
-    <div class="modal-card analysis-card">
-      <div class="modal-head"><div><h2>تحليل ملف PDF</h2><p id="analysisSubtitle">اختر الصفحة التي تريد استيرادها كعناصر هندسية.</p></div><button class="modal-close" data-close="analysisModal">×</button></div>
+    <div class="modal-card analysis-card" role="dialog" aria-modal="true" aria-labelledby="analysisTitle">
+      <div class="modal-head"><div><h2 id="analysisTitle">تحليل ملف PDF</h2><p id="analysisSubtitle">اختر الصفحة التي تريد استيرادها كعناصر هندسية.</p></div><button class="modal-close" data-close="analysisModal" type="button" aria-label="إغلاق نافذة الصفحات">×</button></div>
       <div id="analysisOverview" class="analysis-overview"></div>
       <div id="pagesGrid" class="pages-grid"></div>
     </div>
@@ -247,7 +243,19 @@
     </div>
   </div>
 
+  <div id="loadingOverlay" class="loading-overlay hidden" role="dialog" aria-modal="true" aria-live="polite" aria-labelledby="loadingTitle" aria-describedby="loadingDetail">
+    <div class="loading-card">
+      <div class="loader-ring" aria-hidden="true"></div>
+      <strong id="loadingTitle">جارٍ تجهيز العملية...</strong>
+      <span id="loadingDetail">يرجى الانتظار وعدم إغلاق الصفحة</span>
+      <div id="loadingProgress" class="loading-progress" role="progressbar" aria-label="تقدم العملية" aria-valuemin="0" aria-valuemax="100">
+        <div id="loadingProgressBar" class="loading-progress-bar"></div>
+      </div>
+      <div class="loading-meta"><span id="loadingProgressText">بدء العملية</span><span id="loadingElapsed">0 ث</span></div>
+    </div>
+  </div>
+
   <div id="toastStack" class="toast-stack"></div>
-  <script src="/static/app.js?v=20260811-editing-tools-v17"></script>
+  <script src="/static/app.js?v=20260812-raster-scale-speed-v20"></script>
 </body>
 </html>

@@ -305,6 +305,13 @@ def detect_dimension_unit(page_text,texts):
     for unit,pattern in checks:
         for line in lines:
             if pattern.search(line): return {'unit':unit,'confidence':'explicit','evidence':line[:160]}
+    suffixes=[]
+    for item in texts:
+        match=re.fullmatch(r'\s*\d+(?:[.,]\d+)?\s*(mm|cm|m)\s*',str(item.get('text','')),re.I)
+        if match:suffixes.append(match.group(1).lower())
+    if suffixes:
+        unit,count=Counter(suffixes).most_common(1)[0]
+        if count>=2 or len(suffixes)==1:return {'unit':unit,'confidence':'explicit','evidence':f'{count} dimension labels include {unit}'}
     values=[]
     for item in texts:
         value=str(item.get('text','')).strip().replace(',','')
@@ -335,12 +342,15 @@ def detect_measurement_scale(texts,unit_info):
     unit=(unit_info or {}).get('unit')
     if unit not in {'m','cm','mm'}: return None
     numeric=[]
+    to_mm={'m':1000.0,'cm':10.0,'mm':1.0}
     for item in texts:
         raw=str(item.get('text','')).strip().replace(' ','')
-        if not re.fullmatch(r'\d+(?:[.,]\d+)?',raw): continue
-        value_text=raw.replace(',','.')
+        match=re.fullmatch(r'(\d+(?:[.,]\d+)?)(mm|cm|m)?',raw,re.I)
+        if not match: continue
+        value_text=match.group(1).replace(',','.');label_unit=(match.group(2) or '').lower() or None
         try: value=float(value_text)
         except ValueError: continue
+        if label_unit:value=value*to_mm[label_unit]/to_mm[unit]
         if not (0<value<1_000_000): continue
         if re.search(r'(GRID|TITLE|DOOR|WINDOW|ROOM|SHEET)',str(item.get('layer','')),re.I): continue
         angle=float(item.get('angle',0))%180
@@ -404,12 +414,17 @@ def extract_editable_geometry(pdf_path:Path|str,page_index=0):
             sk=style_key(path)
             if sk not in smap:
                 smap[sk]=len(styles); styles.append({'stroke':sk[0],'fill':sk[1],'width':sk[2],'strokeAlpha':sk[3],'fillAlpha':sk[4],'dashes':sk[5]})
-            source_items+=len(path.get('items',[])); sidx=smap[sk]; layer=path.get('layer') or 'PDF_Geometry'; seq=int(path.get('seqno') or pn)
+            items=path.get('items',[]);source_items+=len(items); sidx=smap[sk]; layer=path.get('layer') or 'PDF_Geometry'; seq=int(path.get('seqno') or pn)
+            if len(items)==1 and items[0][0]=='l':
+                a=tx(items[0][1],m);z=tx(items[0][2],m);e={'t':'line','p':a+z,'len':round(math.hypot(z[0]-a[0],z[1]-a[1]),3),'bbox':[min(a[0],z[0]),min(a[1],z[1]),max(a[0],z[0]),max(a[1],z[1])]}
+                e.update({'id':f'e{len(es)}','s':sidx,'path':pn,'subpath':0,'layer':layer,'seq':seq})
+                if is_wall_layer(layer):e.update({'wall':True,'role':'wall'})
+                es.append(e);continue
             for sn,sub in enumerate(split_path(path,m)):
                 e=classify(sub); e.update({'id':f'e{len(es)}','s':sidx,'path':pn,'subpath':sn,'layer':layer,'seq':seq})
                 if is_wall_layer(layer): e.update({'wall':True,'role':'wall'})
                 es.append(e)
         pre=len(es); es=group_outlined_text(es,styles); es=group_ring_symbols(es,styles); es=group_ring_contents(es,styles); texts=serialize_text(page,m)
-        unit=detect_dimension_unit(page.get_text('text') or '',texts); measurement_scale=detect_measurement_scale(texts,unit)
-        st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'wall_entities':sum(bool(e.get('wall')) for e in es),'seconds':round(time.perf_counter()-started,3)}
-        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'dimension_unit':unit,'measurement_scale':measurement_scale,'stats':st}
+        unit=detect_dimension_unit('\n'.join(t.get('text','') for t in texts),texts); measurement_scale=detect_measurement_scale(texts,unit);image_count=len(page.get_images(full=True));raster_underlay=bool(image_count and not es and not texts)
+        st={'source_items':source_items,'entities':len(es),'pre_group_entities':pre,'lines':sum(e['t']=='line' for e in es),'polylines':sum(e['t']=='polyline' for e in es),'paths':sum(e['t']=='path' for e in es),'circles':sum(e['t']=='circle' for e in es),'ellipses':sum(e['t']=='ellipse' for e in es),'rectangles':sum(e['t']=='rect' for e in es),'texts':len(texts),'images':image_count,'wall_entities':sum(bool(e.get('wall')) for e in es),'seconds':round(time.perf_counter()-started,3)}
+        return {'page':page_index,'width':round(float(page.rect.width),3),'height':round(float(page.rect.height),3),'rotation':int(page.rotation),'styles':styles,'entities':es,'texts':texts,'dimension_unit':unit,'measurement_scale':measurement_scale,'raster_underlay':raster_underlay,'stats':st}

@@ -21,6 +21,9 @@ html,body{width:100%;height:100%;min-width:0;min-height:0}
 .tool-rail{grid-column:3}
 .right-panel{grid-column:1}
 .canvas-stage{height:100%;min-height:0;isolation:isolate}
+.canvas-stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+#baseCanvas{z-index:0;pointer-events:none;transform-origin:0 0;will-change:transform}
+#editorCanvas{z-index:1;background:transparent}
 .editor-toolbar,.statusbar{min-width:0}
 .panel-content.active{min-height:0;overflow:auto;overscroll-behavior:contain}
 .selection-hud{max-width:calc(100% - 24px);white-space:nowrap}
@@ -55,3 +58,68 @@ html,body{width:100%;height:100%;min-width:0;min-height:0}
 /* ===== GENERIC EDITING / PRECISE DISTRIBUTION ===== */
 .distance-input{display:flex;direction:ltr;gap:5px;align-items:center}.distribution-card .distance-input input{width:74px}.distribution-card .distance-input select{width:55px;padding:6px 4px;border:1px solid #3a424c;border-radius:7px;background:#14181d;color:#fff}.distribution-summary,.distribution-help{display:block;color:#aeb8c4;font-size:8px;line-height:1.6;margin:5px 0 9px}.distribution-help{color:#7f8996;margin:8px 0 0}.geometry-size-fields,.text-edit-fields{margin-top:12px;padding:11px;background:#1d2229;border:1px solid #38404a;border-radius:10px}.geometry-size-fields .effect-title em,.text-edit-fields .effect-title em{color:#7fe5ff;background:#17313a;border-color:#285767}.text-content-label{align-items:flex-start!important;flex-direction:column;gap:7px}.properties-form textarea{width:100%;resize:vertical;min-height:66px;padding:8px;border:1px solid #39414b;border-radius:7px;background:#13171c;color:#fff;font:inherit;line-height:1.6}.properties-form input[type=color]{height:34px;padding:3px}.selection-hud #hudDuplicate{color:#77e5ff}
 .selection-hud #hudDelete{color:#ff7c76}
+
+/* ===== UPLOAD / IMPORT FEEDBACK AND MODAL NAVIGATION ===== */
+body.is-busy{cursor:progress}
+.loading-overlay{
+  position:fixed;
+  inset:0;
+  z-index:500;
+  padding:24px;
+  background:rgba(5,8,12,.88);
+  backdrop-filter:blur(10px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.loading-card{
+  width:min(430px,92vw);
+  padding:30px 28px 25px;
+  border:1px solid #3b4551;
+  border-radius:18px;
+  background:radial-gradient(circle at 80% 0,rgba(255,81,77,.14),transparent 48%),#181d24;
+  box-shadow:0 30px 90px rgba(0,0,0,.65);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:9px;
+  text-align:center;
+  direction:rtl;
+}
+.loading-card .loader-ring{width:54px;height:54px;margin-bottom:4px}
+.loading-card strong{font-size:17px}
+.loading-card>span{min-height:20px;color:#a9b3bf;font-size:11px;line-height:1.7}
+.loading-progress{
+  position:relative;
+  width:100%;
+  height:9px;
+  margin-top:8px;
+  overflow:hidden;
+  border:1px solid #353d48;
+  border-radius:999px;
+  background:#101419;
+}
+.loading-progress-bar{
+  width:0;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#ff4545,#ff8277);
+  box-shadow:0 0 15px rgba(255,81,77,.42);
+  transition:width .2s ease;
+}
+.loading-progress.indeterminate .loading-progress-bar{
+  width:38%;
+  animation:loading-sweep 1.2s ease-in-out infinite;
+}
+@keyframes loading-sweep{0%{transform:translateX(175%)}100%{transform:translateX(-275%)}}
+.loading-meta{width:100%;display:flex;align-items:center;justify-content:space-between;color:#8994a1;font-size:9px;direction:rtl}
+.loading-meta span:first-child{color:#d8dee5}
+.analysis-card{height:min(90vh,860px);overflow:hidden;display:flex;flex-direction:column;direction:rtl}
+.analysis-card .modal-head{flex:0 0 auto}
+.analysis-card .analysis-overview{flex:0 0 auto}
+.analysis-card .pages-grid{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:2px 2px 12px 7px}
+.analysis-card .modal-close{position:relative;z-index:2;flex:0 0 34px}
+.modal-close:hover{border-color:#ff7169;background:#382126;color:#fff}
+.modal-close:focus-visible{outline:3px solid rgba(65,216,255,.38);outline-offset:2px}
+.page-card button:disabled{opacity:.62;cursor:progress}
+@media(max-width:620px){.loading-card{padding:25px 20px}.analysis-card{height:94vh;max-height:94vh;padding:14px}.analysis-overview{grid-template-columns:1fr 1fr}.pages-grid{grid-template-columns:1fr}}
