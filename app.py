@@ -15,6 +15,22 @@ for d in (UPLOAD_DIR,CACHE_DIR): d.mkdir(parents=True,exist_ok=True)
 IS_CLOUD=os.environ.get('RENDER','').lower()=='true' or bool(os.environ.get('RENDER_EXTERNAL_HOSTNAME')); HOST=os.environ.get('HOST','0.0.0.0' if IS_CLOUD else '127.0.0.1'); PORT=int(os.environ.get('PORT','8765')); MAX_UPLOAD=120*1024*1024
 PROJECTS:dict[str,dict[str,Any]]={}; PROJECT_LOCK=threading.Lock(); CACHE_LOCK_GUARD=threading.Lock(); CACHE_LOCKS:dict[str,threading.Lock]={}; ANALYSIS_VERSION=3
 
+PAGE_SIZES={'a4':(595.276,841.890),'a3':(841.890,1190.551)}  # points, portrait
+def svg_to_pdf(svg,page_size='native'):
+ src=fitz.open(stream=svg.encode(),filetype='svg'); native=src.convert_to_pdf()
+ key=str(page_size or 'native').lower()
+ if key not in PAGE_SIZES: return native
+ src_pdf=fitz.open('pdf',native); sp=src_pdf[0].rect
+ pw,ph=PAGE_SIZES[key]
+ if sp.width>=sp.height: pw,ph=max(pw,ph),min(pw,ph)   # landscape to match wide plans
+ else: pw,ph=min(pw,ph),max(pw,ph)                      # portrait
+ out=fitz.open(); page=out.new_page(width=pw,height=ph)
+ margin=28.35  # ~1cm printable margin
+ aw,ah=max(1.0,pw-2*margin),max(1.0,ph-2*margin)
+ scale=min(aw/max(sp.width,1e-6),ah/max(sp.height,1e-6))
+ tw,th=sp.width*scale,sp.height*scale; x0=(pw-tw)/2; y0=(ph-th)/2
+ page.show_pdf_page(fitz.Rect(x0,y0,x0+tw,y0+th),src_pdf,0)
+ return out.tobytes()
 def safe_name(name):
  name=Path(name or 'drawing.pdf').name; name=re.sub(r'[^A-Za-z0-9._() -]+','_',name).strip(); return (name or 'drawing.pdf')[:160]
 def detect_scale(text):
@@ -142,9 +158,10 @@ class Handler(BaseHTTPRequestHandler):
     with PROJECT_LOCK:PROJECTS[pid]={'path':stored,'filename':filename,'fingerprint':fingerprint}
     return self.send_json(result)
    if path=='/api/svg-to-pdf':
-    data=json.loads(body.decode());svg=data.get('svg','')
+    data=json.loads(body.decode());svg=data.get('svg','');page_size=data.get('page_size','native')
     if not svg or len(svg)>30_000_000:return self.send_json({'detail':'Invalid SVG'},400)
-    sd=fitz.open(stream=svg.encode(),filetype='svg');return self.send_bytes(sd.convert_to_pdf(),'application/pdf','A2Z-Lighting-Plan.pdf')
+    suffix='' if str(page_size).lower() not in PAGE_SIZES else '-'+str(page_size).upper()
+    return self.send_bytes(svg_to_pdf(svg,page_size),'application/pdf',f'A2Z-Lighting-Plan{suffix}.pdf')
    self.send_error(404)
   except ValueError as exc:self.send_json({'detail':str(exc)},400)
   except Exception as exc:self.send_json({'detail':f'Server error: {exc}'},500)
