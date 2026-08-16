@@ -123,3 +123,7 @@ body.is-busy{cursor:progress}
 .modal-close:focus-visible{outline:3px solid rgba(65,216,255,.38);outline-offset:2px}
 .page-card button:disabled{opacity:.62;cursor:progress}
 @media(max-width:620px){.loading-card{padding:25px 20px}.analysis-card{height:94vh;max-height:94vh;padding:14px}.analysis-overview{grid-template-columns:1fr 1fr}.pages-grid{grid-template-columns:1fr}}
+
+/* Phase-1: collapsible side panel */
+body.panel-collapsed .right-panel{display:none}
+body.panel-collapsed .workspace{grid-template-columns:0 minmax(0,1fr) var(--rail)}
