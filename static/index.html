@@ -27,7 +27,9 @@
         <div class="export-wrap">
           <button id="exportBtn" class="btn primary">تصدير <span>▾</span></button>
           <div id="exportMenu" class="export-menu hidden">
-            <button data-export="pdf">PDF متجهي</button>
+            <button data-export="pdf">PDF متجهي (بحجم المخطط)</button>
+            <button data-export="pdf-a4">PDF للطباعة — A4</button>
+            <button data-export="pdf-a3">PDF للطباعة — A3</button>
             <button data-export="svg">SVG قابل للتحرير</button>
             <button data-export="png">PNG عالية الدقة</button>
             <button data-export="json">ملف المشروع JSON</button>
@@ -43,8 +45,10 @@
         <button class="tool" data-tool="pan" title="تحريك"><span>✋</span><small>تحريك</small></button>
         <div class="rail-sep"></div>
         <button class="tool" data-tool="line" title="رسم خط"><span>╱</span><small>خط</small></button>
+        <button class="tool" data-tool="text" title="إضافة نص"><span>T</span><small>نص</small></button>
         <button class="tool" data-tool="measure" title="قياس"><span>↔</span><small>قياس</small></button>
-        <button class="tool" data-tool="calibrate" title="معايرة"><span>⌁</span><small>معايرة</small></button>
+        <button class="tool" data-tool="calibrate" title="تصحيح مقياس الرسم يدوياً"><span>⌁</span><small>تصحيح مقياس</small></button>
+        <button class="tool" data-tool="center" title="مركز أربع نقاط (مربع)"><span>⊹</span><small>مركز</small></button>
         <div class="rail-sep"></div>
         <button class="tool" data-tool="light" title="إضافة إنارة"><span>●</span><small>إنارة</small></button>
         <button class="tool" data-tool="distribute" title="توزيع متساوٍ"><span>•••</span><small>توزيع</small></button>
@@ -55,6 +59,7 @@
       <section class="editor-column">
         <div class="editor-toolbar">
           <div class="toolbar-group">
+            <button id="panelToggle" class="icon-btn mode-active" title="إظهار/إخفاء القسم الجانبي">▤ إخفاء اللوحة</button>
             <button id="fitBtn" class="icon-btn" title="ملاءمة المخطط">ملاءمة</button>
             <button id="zoomOutBtn" class="icon-btn">−</button>
             <span id="zoomValue" class="zoom-label">100%</span>
@@ -72,6 +77,8 @@
               </select>
             </label>
             <label class="switch-line"><input id="snapToggle" type="checkbox" checked /> Snap</label>
+            <button id="thinWallsToggle" class="icon-btn mode-active" title="جعل الجدران خطوطاً رفيعة">▏ جدران رفيعة</button>
+            <button id="monoToggle" class="icon-btn" title="أبيض وأسود / ملوّن">🎨 ملوّن</button>
             <button id="darkPlanToggle" class="icon-btn mode-active" title="تبديل لون أرضية المخطط">◐ مخطط داكن</button>
             <button id="simulationToggle" class="icon-btn simulation-active" title="تشغيل وإيقاف تأثير الإضاءة">💡 التأثير ON</button>
             <button id="undoBtn" class="icon-btn" title="تراجع">↶</button>
@@ -80,6 +87,7 @@
         </div>
 
         <div id="canvasStage" class="canvas-stage">
+          <canvas id="baseCanvas" aria-hidden="true"></canvas>
           <canvas id="editorCanvas"></canvas>
           <div id="emptyCanvas" class="empty-canvas">
             <div class="empty-visual"><span></span><span></span><span></span></div>
@@ -87,14 +95,9 @@
             <p>الخطوط والمنحنيات والنصوص ستُقرأ كعناصر مستقلة، وليست صورة ثابتة.</p>
             <div class="empty-actions"><button id="emptyUpload" class="btn primary">رفع ملف PDF</button><button id="emptySample" class="btn ghost">تجربة النموذج الحقيقي</button></div>
           </div>
-          <div id="loadingOverlay" class="loading-overlay hidden">
-            <div class="loader-ring"></div>
-            <strong id="loadingTitle">جارٍ تحليل هندسة PDF...</strong>
-            <span id="loadingDetail">استخراج الخطوط والمنحنيات والنصوص</span>
-          </div>
           <div id="selectionHud" class="selection-hud hidden">
             <strong id="selectionCount">0</strong><span>عنصر محدد</span>
-            <button id="hudDelete">حذف</button><button id="hudClear">إلغاء</button>
+            <button id="hudDuplicate">تكرار</button><button id="hudDelete">حذف</button><button id="hudClear">إلغاء</button>
           </div>
         </div>
 
@@ -122,7 +125,12 @@
           <div class="panel-card distribution-card">
             <div class="card-title">توزيع تلقائي</div>
             <label>عدد الوحدات <input id="distributionCount" type="number" min="2" max="50" value="6" /></label>
-            <button id="startDistribution" class="wide-btn">حدد نقطتي التوزيع</button>
+            <label>المسافة بين الوحدات
+              <span class="distance-input"><input id="distributionDistance" type="number" min="0" step="0.01" value="1" /><select id="distributionUnit"><option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option></select></span>
+            </label>
+            <small id="distributionSummary" class="distribution-summary">6 وحدات، كل 1 m — الطول الإجمالي 5 m.</small>
+            <button id="startDistribution" class="wide-btn">تحديد نقطة البداية والاتجاه</button>
+            <small class="distribution-help">النقطة الثانية تحدد اتجاه الصف. اترك المسافة فارغة للتوزيع بالتساوي بين نقطتين.</small>
           </div>
           <div class="panel-card simulation-card">
             <div class="card-title">معاينة الإضاءة</div>
@@ -160,6 +168,18 @@
             <label>الإحداثي Y <input id="propY" type="number" step="0.1" /></label>
             <label id="propRotationRow">الدوران <input id="propRotation" type="number" step="1" /></label>
             <label id="propScaleRow">حجم الرمز <input id="propScale" type="range" min="0.5" max="2.5" value="1" step="0.05" /></label>
+            <div id="geometrySizeFields" class="geometry-size-fields hidden">
+              <div class="effect-title"><span>الأبعاد</span><em id="propertyUnitHint">وحدة الرسم</em></div>
+              <label id="propLengthRow">الطول <input id="propLength" type="number" min="0.001" step="0.01" /></label>
+              <label id="propWidthRow">العرض <input id="propWidth" type="number" min="0.001" step="0.01" /></label>
+              <label id="propHeightRow">الارتفاع <input id="propHeight" type="number" min="0.001" step="0.01" /></label>
+            </div>
+            <div id="textEditFields" class="text-edit-fields hidden">
+              <div class="effect-title"><span>النص</span><em>قابل للتحرير</em></div>
+              <label class="text-content-label">المحتوى <textarea id="propTextContent" rows="3"></textarea></label>
+              <label>حجم الخط <input id="propFontSize" type="number" min="1" max="500" step="1" /></label>
+              <label>لون النص <input id="propTextColor" type="color" /></label>
+            </div>
             <div id="lightEffectFields" class="light-effect-fields hidden">
               <div class="effect-title"><span>تأثير الإضاءة</span><em id="effectStateLabel">مُشغّل</em></div>
               <label>شدة الضوء <input id="propIntensity" type="range" min="0" max="1.5" value="1" step="0.05" /></label>
@@ -175,8 +195,8 @@
               </label>
               <label class="effect-switch">تشغيل الوحدة <input id="propLightOn" type="checkbox" checked /></label>
             </div>
-            <div class="property-buttons"><button id="duplicateBtn">نسخ</button><button id="propertyDelete" class="danger-outline">حذف</button></div>
-            <div class="property-note">عند تحديد خط PDF واحد تظهر نقطتا نهاية يمكن سحبهما مباشرة.</div>
+            <div class="property-buttons"><button id="duplicateBtn">تكرار العنصر</button><button id="propertyDelete" class="danger-outline">حذف</button></div>
+            <div class="property-note">اسحب مقابض التحديد لتغيير الطول أو الأبعاد، أو أدخل قيماً دقيقة هنا. النسخة الجديدة مستقلة ويمكن تعديلها منفردة.</div>
           </div>
         </section>
 
@@ -204,8 +224,8 @@
   </div>
 
   <div id="analysisModal" class="modal-backdrop hidden">
-    <div class="modal-card analysis-card">
-      <div class="modal-head"><div><h2>تحليل ملف PDF</h2><p id="analysisSubtitle">اختر الصفحة التي تريد استيرادها كعناصر هندسية.</p></div><button class="modal-close" data-close="analysisModal">×</button></div>
+    <div class="modal-card analysis-card" role="dialog" aria-modal="true" aria-labelledby="analysisTitle">
+      <div class="modal-head"><div><h2 id="analysisTitle">تحليل ملف PDF</h2><p id="analysisSubtitle">اختر الصفحة التي تريد استيرادها كعناصر هندسية.</p></div><button class="modal-close" data-close="analysisModal" type="button" aria-label="إغلاق نافذة الصفحات">×</button></div>
       <div id="analysisOverview" class="analysis-overview"></div>
       <div id="pagesGrid" class="pages-grid"></div>
     </div>
@@ -218,7 +238,30 @@
     </div>
   </div>
 
+  <div id="calibrationModal" class="modal-backdrop hidden">
+    <div class="modal-card calibration-card" role="dialog" aria-modal="true" aria-labelledby="calibrationTitle">
+      <div class="modal-head"><div><h2 id="calibrationTitle">تصحيح مقياس الرسم</h2><p>يُستخدم فقط إذا لم يتطابق القياس مع البعد المكتوب في المخطط.</p></div><button id="calibrationClose" class="modal-close" type="button">×</button></div>
+      <div id="calibrationDetected" class="calibration-detected"></div>
+      <label class="calibration-field"><span>قيمة البعد المرجعي</span><input id="calibrationValue" inputmode="decimal" placeholder="مثال: 4.00 أو 400" /></label>
+      <label class="calibration-field"><span>وحدة القياس</span><select id="calibrationUnit"><option value="m">متر (m)</option><option value="cm">سنتيمتر (cm)</option><option value="mm">ملّيمتر (mm)</option></select></label>
+      <p id="calibrationExample" class="calibration-help">أدخل قيمة البعد المحدد كما هي مكتوبة في المخطط، ثم اختر وحدتها.</p>
+      <div class="calibration-actions"><button id="calibrationCancel" class="btn ghost" type="button">إلغاء</button><button id="calibrationConfirm" class="btn primary" type="button">حفظ التصحيح</button></div>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden" role="dialog" aria-modal="true" aria-live="polite" aria-labelledby="loadingTitle" aria-describedby="loadingDetail">
+    <div class="loading-card">
+      <div class="loader-ring" aria-hidden="true"></div>
+      <strong id="loadingTitle">جارٍ تجهيز العملية...</strong>
+      <span id="loadingDetail">يرجى الانتظار وعدم إغلاق الصفحة</span>
+      <div id="loadingProgress" class="loading-progress" role="progressbar" aria-label="تقدم العملية" aria-valuemin="0" aria-valuemax="100">
+        <div id="loadingProgressBar" class="loading-progress-bar"></div>
+      </div>
+      <div class="loading-meta"><span id="loadingProgressText">بدء العملية</span><span id="loadingElapsed">0 ث</span></div>
+    </div>
+  </div>
+
   <div id="toastStack" class="toast-stack"></div>
-  <script src="/static/app.js?v=20260805-export-fix-2"></script>
+  <script src="/static/app.js?v=20260816-poc01-phase1"></script>
 </body>
 </html>
