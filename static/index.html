@@ -27,7 +27,9 @@
         <div class="export-wrap">
           <button id="exportBtn" class="btn primary">تصدير <span>▾</span></button>
           <div id="exportMenu" class="export-menu hidden">
-            <button data-export="pdf">PDF متجهي</button>
+            <button data-export="pdf">PDF متجهي (بحجم المخطط)</button>
+            <button data-export="pdf-a4">PDF للطباعة — A4</button>
+            <button data-export="pdf-a3">PDF للطباعة — A3</button>
             <button data-export="svg">SVG قابل للتحرير</button>
             <button data-export="png">PNG عالية الدقة</button>
             <button data-export="json">ملف المشروع JSON</button>
@@ -46,6 +48,7 @@
         <button class="tool" data-tool="text" title="إضافة نص"><span>T</span><small>نص</small></button>
         <button class="tool" data-tool="measure" title="قياس"><span>↔</span><small>قياس</small></button>
         <button class="tool" data-tool="calibrate" title="تصحيح مقياس الرسم يدوياً"><span>⌁</span><small>تصحيح مقياس</small></button>
+        <button class="tool" data-tool="center" title="مركز أربع نقاط (مربع)"><span>⊹</span><small>مركز</small></button>
         <div class="rail-sep"></div>
         <button class="tool" data-tool="light" title="إضافة إنارة"><span>●</span><small>إنارة</small></button>
         <button class="tool" data-tool="distribute" title="توزيع متساوٍ"><span>•••</span><small>توزيع</small></button>
@@ -56,6 +59,7 @@
       <section class="editor-column">
         <div class="editor-toolbar">
           <div class="toolbar-group">
+            <button id="panelToggle" class="icon-btn mode-active" title="إظهار/إخفاء القسم الجانبي">▤ إخفاء اللوحة</button>
             <button id="fitBtn" class="icon-btn" title="ملاءمة المخطط">ملاءمة</button>
             <button id="zoomOutBtn" class="icon-btn">−</button>
             <span id="zoomValue" class="zoom-label">100%</span>
@@ -73,6 +77,8 @@
               </select>
             </label>
             <label class="switch-line"><input id="snapToggle" type="checkbox" checked /> Snap</label>
+            <button id="thinWallsToggle" class="icon-btn mode-active" title="جعل الجدران خطوطاً رفيعة">▏ جدران رفيعة</button>
+            <button id="monoToggle" class="icon-btn" title="أبيض وأسود / ملوّن">🎨 ملوّن</button>
             <button id="darkPlanToggle" class="icon-btn mode-active" title="تبديل لون أرضية المخطط">◐ مخطط داكن</button>
             <button id="simulationToggle" class="icon-btn simulation-active" title="تشغيل وإيقاف تأثير الإضاءة">💡 التأثير ON</button>
             <button id="undoBtn" class="icon-btn" title="تراجع">↶</button>
@@ -256,6 +262,6 @@
   </div>
 
   <div id="toastStack" class="toast-stack"></div>
-  <script src="/static/app.js?v=20260813-poc01-fixes"></script>
+  <script src="/static/app.js?v=20260816-poc01-phase1"></script>
 </body>
 </html>
