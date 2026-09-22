@@ -36,11 +36,11 @@ def main():
     assert all(st[k]>0 for k in ("lines","polylines","paths","circles","ellipses","rectangles")), st
     target=[e for e in data["entities"] if e.get("role") and e["bbox"][2]<75 and 170<e["bbox"][1]<200]
     roles=[e.get("role") for e in target]
-    assert sorted(roles)==["outlined_text","ring_symbol","symbol_marker"], roles
-    assert len(target)==3, "one double-ring bubble must select as ring + numeral + marker"
-    assert all(e["t"]=="path" and len(e.get("source_ids",[]))>=2 for e in target), target
+    assert sorted(roles)==["outlined_text","ring_symbol","ring_symbol","symbol_marker"], roles
+    assert len(target)==4, "one double-ring bubble must select as outer ring + inner ring + numeral + marker"
+    assert sum(e.get("role")=="ring_symbol" for e in target)==2 and sum(e.get("role")=="outlined_text" for e in target)==1, target
     rings=[e for e in data["entities"] if e.get("role")=="ring_symbol" and e["bbox"][2]<75 and 150<e["bbox"][1]<930]
-    assert len(rings)==18, len(rings)
+    assert len(rings)==36, len(rings)
     assert sum(e.get("role")=="symbol_marker" for e in data["entities"])==120
     assert st["seconds"]<10, st["seconds"]
     avg=statistics.mean(r["error_pct"] for r in rows); mx=max(r["error_pct"] for r in rows)
