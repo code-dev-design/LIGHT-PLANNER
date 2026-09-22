@@ -382,3 +382,27 @@ Fresh UI exports after the editing pass:
 | PDF | PASS | 309,157 bytes; `%PDF-` signature verified |
 
 The final scale-correction dialog is deliberately short and formal: it states when automatic scale is already available, asks only for reference value and unit, provides one neutral example, and uses `حفظ التصحيح`. The junction action is labelled `دمج الزوايا` with an L/T/X engineering tooltip. No DWG/DXF work was introduced.
+
+
+## Regression fix set — plan colours, lighting controls, measurement and grid bubbles (2026-09-22)
+
+User acceptance screenshots exposed four UI regressions after the previous junction work. The fix set remains inside POC-01 / PDF only.
+
+### Fixed
+- Default plan view is now Light mode with an engineering colour palette. Saturated source colours are preserved; monochrome/low-contrast PDF geometry receives stable semantic colours by geometry role/type so dense drawings no longer collapse visually into black-on-dark.
+- Dark/Light switching now invalidates the cached base canvas before redraw; stale base rendering can no longer make the toggle appear dead.
+- Lighting effects render from the effects layer independently of symbol-layer visibility, and the preview gradient was strengthened so ON/OFF is visually obvious in both themes.
+- Measurement is free by default between arbitrary points. Global Snap no longer constrains the measuring cursor; holding Shift temporarily enables endpoint/midpoint/segment snap while measuring.
+- Live and committed dimension graphics both render the numeric measurement label. Uncalibrated plans still request one reference dimension before reporting engineering units.
+- Tiny accidental drags under 6 screen pixels no longer execute Window/Crossing selection, preventing a click on a small grid bubble from unexpectedly selecting a cluster of primitives.
+- Double-ring grid bubbles no longer merge both concentric rings into one path. Outer ring, inner ring, outlined numeral and the small marker/leader component are normalized as separate logical editable entities.
+- Repeated-click cycling still exposes overlapping logical parts without turning a normal click into a multi-selection.
+
+### Regression guards
+- JavaScript syntax compilation: PASS.
+- Source guards for default Light mode, base-canvas invalidation, free measurement + Shift snap, lighting-effect toggle/render path, numeric dimension label, and cache-busted browser script: PASS.
+- Geometry regression expectation updated from 3 logical bubble parts to 4: outer ring + inner ring + outlined numeral + marker.
+- No POC-02, DXF or DWG work was started by this fix set.
+
+### Manual acceptance still required
+A fresh local Chrome reload of this branch should be run against the reported ARCH - 01 (26).pdf page and the double-ring grid marker to confirm the visual result and interaction on the user's workstation. This section records the committed fix, not a claim that the user's local browser instance has already pulled it.
