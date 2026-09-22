@@ -93,13 +93,13 @@ def parse_multipart(body,ctype):
   if fm:return payload.rstrip(b'\r\n-'),safe_name(fm.group(1))
  raise ValueError('No file part found')
 def cached_vector_payload(pdf_path,fingerprint,page_index):
- cache=CACHE_DIR/f'{fingerprint}-vectors-v8-{page_index}.json.gz'
+ cache=CACHE_DIR/f'{fingerprint}-vectors-v9-{page_index}.json.gz'
  with cache_lock(f'vectors:{fingerprint}:{page_index}'):
   if cache.exists():return cache.read_bytes()
   data=extract_editable_geometry(Path(pdf_path),page_index);packed=gzip.compress(json.dumps(data,ensure_ascii=False,separators=(',',':')).encode(),1);cache.write_bytes(packed);return packed
 
 class Handler(BaseHTTPRequestHandler):
- server_version='A2ZVectorCAD/3.0-POC01'
+ server_version='A2ZVectorCAD/3.1-POC01'
  def log_message(self,fmt,*args): print(f'[{self.log_date_time_string()}] {fmt%args}')
  def send_json(self,data,status=200,compress=True):
   raw=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode(); use=compress and 'gzip' in self.headers.get('Accept-Encoding','') and len(raw)>2048; payload=gzip.compress(raw,3) if use else raw
@@ -122,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
   try:
    if path=='/':return self.serve_file(STATIC_DIR/'index.html')
    if path.startswith('/static/'):return self.serve_file(STATIC_DIR/path[8:])
-   if path=='/api/health':return self.send_json({'status':'ok','engine':f"PyMuPDF {getattr(fitz,'__version__','')}",'mode':'poc01-normalized-vector-pdf-import','schema':8})
+   if path=='/api/health':return self.send_json({'status':'ok','engine':f"PyMuPDF {getattr(fitz,'__version__','')}",'mode':'poc01-normalized-vector-pdf-import','schema':9})
    if path=='/api/sample':return self.send_json(project_from_sample())
    m=re.fullmatch(r'/api/project/([A-Za-z0-9_-]+)/thumb/(\d+)',path)
    if m:
