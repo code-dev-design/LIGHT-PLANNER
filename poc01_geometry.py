@@ -143,6 +143,12 @@ def group_outlined_text(es,styles):
     return out
 
 def group_ring_symbols(es,styles):
+    """Tag each visible ring as its own editable entity.
+
+    A grid bubble may contain two concentric rings.  They are visually related
+    but must remain independently selectable, so pairing is used only to
+    recognize them and assign metadata -- never to merge them into one path.
+    """
     cand=[]
     for i,e in enumerate(es):
         if e['t']!='polyline' or e.get('closed'): continue
@@ -150,7 +156,8 @@ def group_ring_symbols(es,styles):
         if not (6<=w<=20 and 6<=h<=20 and 0.82<=w/h<=1.22): continue
         if len(e.get('p',[]))<22 or styles[e['s']].get('fill'): continue
         cand.append(i)
-    used=set(); replacements=[]
+    used=set(); tagged={}
+    group_no=0
     for i in cand:
         if i in used: continue
         a=es[i]; ab=a['bbox']; ac=((ab[0]+ab[2])/2,(ab[1]+ab[3])/2); aw=ab[2]-ab[0]; ah=ab[3]-ab[1]
@@ -163,13 +170,13 @@ def group_ring_symbols(es,styles):
             score=cd+abs(ratio-.85)
             if best is None or score<best[0]: best=(score,j)
         if best:
-            j=best[1]; used|={i,j}; a,b=es[i],es[j]
-            def sub(e):
-                pts=[[e['p'][k],e['p'][k+1]] for k in range(0,len(e['p']),2)]
-                return {'commands':[['l',pts[k],pts[k+1]] for k in range(len(pts)-1)],'closed':False,'s':e['s']}
-            replacements.append((min(i,j),{'id':'tmp','t':'path','subpaths':[sub(a),sub(b)],'bbox':bbox_union([a['bbox'],b['bbox']]),'s':a['s'],'path':a.get('path',-1),'layer':a.get('layer','PDF_Geometry'),'seq':min(a.get('seq',0),b.get('seq',0)),'role':'ring_symbol','source_ids':[a['id'],b['id']]}))
-    out=[e for i,e in enumerate(es) if i not in used]+[e for _,e in replacements]
-    out.sort(key=lambda e:(e.get('seq',0),e.get('path',0)))
+            j=best[1]; used|={i,j}; group_no+=1
+            outer=dict(es[i]); inner=dict(es[j])
+            outer.update({'role':'ring_symbol','ring_part':'outer','symbol_group':f'ring{group_no}','source_ids':[es[i]['id']]})
+            inner.update({'role':'ring_symbol','ring_part':'inner','symbol_group':f'ring{group_no}','source_ids':[es[j]['id']]})
+            tagged[i]=outer; tagged[j]=inner
+    out=[tagged.get(i,e) for i,e in enumerate(es)]
+    out.sort(key=lambda e:(e.get('seq',0),e.get('path',0),e.get('ring_part','')))
     for i,e in enumerate(out): e['id']=f'e{i}'
     return out
 
